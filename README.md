@@ -92,11 +92,10 @@ With no configuration at all, it shows uptown departures at Times Sq-42 St.
 
 ## Behavior
 
-- **Next train, no auto-scroll.** Position dots down the right edge show
-  where you are in the upcoming-arrivals list (up to 8 — one dot per 2px of
-  display). When the list spans lines of different colors, **each dot takes
-  its train's line color** (bright = shown, dimmed = the rest); a
-  single-line list keeps the classic white/dim dots. Over USB, the Bar's
+- **Next train, no auto-scroll.** Two 1px columns of position dots run down
+  the right edge: the right column always shows **each upcoming train's
+  line color**, and the white pixel in the left column marks the departure
+  on screen (up to 8 — one row per 2px of display). Over USB, the Bar's
   **dial** scrolls through arrivals; 25 s idle snaps back to the soonest.
 - The minutes digit flips exactly on minute boundaries.
 - **Departure flash**: when the shown train's trip disappears from the feed,

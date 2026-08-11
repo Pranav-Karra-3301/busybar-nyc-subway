@@ -73,7 +73,6 @@ except ValueError:
 APP_NAME = os.environ.get("BUSYBAR_APP_NAME", "nyc-subway")
 
 WHITE = "#FFFFFFFF"
-DIM = "#404040FF"
 
 FETCH_SECS = 30          # MTA poll interval
 TICK_SECS = 2            # supervisor cadence for minute flips
@@ -534,13 +533,6 @@ def _lerp(a, b, t):
 
 def _scale(c, k):
     return tuple(min(255, round(v * k)) for v in c)
-
-
-def _dot_color(hexc, active):
-    r, g, b = _hex_rgb(hexc)
-    if not active:
-        r, g, b = (round(v * 0.28) for v in (r, g, b))
-    return f"#{r:02X}{g:02X}{b:02X}FF"
 
 
 def palette_for(desig):
@@ -1064,23 +1056,24 @@ def build_screen(cfg, assets, arrivals, index, offset=0):
             "font": "bold", "color": WHITE, "align": "bottom_left",
             "x": 37, "y": 15 + offset, "timeout": ELEMENT_TIMEOUT,
         })
-    # position dots: when the upcoming list spans lines of different colors,
-    # each dot takes its train's line color (bright = shown, dimmed = the
-    # rest); a single-color list keeps the classic white/dim look
-    dot_hexes = [DESIGNATOR_META[designator(r)][0] for _, r, _ in arrivals]
-    multicolor = len(set(dot_hexes)) > 1
-    for i in range(len(arrivals)):
-        if multicolor:
-            fill = _dot_color(dot_hexes[i], i == index)
-        else:
-            fill = WHITE if i == index else DIM
+    # position dots, two 1px columns down the right edge: the right column
+    # always shows each upcoming train's line color; the single white pixel
+    # in the left column marks the departure currently on screen (one
+    # element that moves — merge-by-id keeps it from leaving trails)
+    for i, (_t, r, _trip) in enumerate(arrivals):
         els.append({
             "id": f"dot{i}", "type": "rectangle",
-            "x": 70, "y": i * 2, "width": 2, "height": 1,
+            "x": 71, "y": i * 2, "width": 1, "height": 1,
             "fill": "solid",
-            "fill_colors": [fill],
+            "fill_colors": [DESIGNATOR_META[designator(r)][0] + "FF"],
             "border_width": 0, "timeout": ELEMENT_TIMEOUT,
         })
+    els.append({
+        "id": "mark", "type": "rectangle",
+        "x": 70, "y": index * 2, "width": 1, "height": 1,
+        "fill": "solid", "fill_colors": [WHITE],
+        "border_width": 0, "timeout": ELEMENT_TIMEOUT,
+    })
     return els
 
 
