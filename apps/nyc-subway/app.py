@@ -536,6 +536,13 @@ def _scale(c, k):
     return tuple(min(255, round(v * k)) for v in c)
 
 
+def _dot_color(hexc, active):
+    r, g, b = _hex_rgb(hexc)
+    if not active:
+        r, g, b = (round(v * 0.28) for v in (r, g, b))
+    return f"#{r:02X}{g:02X}{b:02X}FF"
+
+
 def palette_for(desig):
     hexc, _black, key = DESIGNATOR_META[desig]
     if key:
@@ -1057,12 +1064,21 @@ def build_screen(cfg, assets, arrivals, index, offset=0):
             "font": "bold", "color": WHITE, "align": "bottom_left",
             "x": 37, "y": 15 + offset, "timeout": ELEMENT_TIMEOUT,
         })
+    # position dots: when the upcoming list spans lines of different colors,
+    # each dot takes its train's line color (bright = shown, dimmed = the
+    # rest); a single-color list keeps the classic white/dim look
+    dot_hexes = [DESIGNATOR_META[designator(r)][0] for _, r, _ in arrivals]
+    multicolor = len(set(dot_hexes)) > 1
     for i in range(len(arrivals)):
+        if multicolor:
+            fill = _dot_color(dot_hexes[i], i == index)
+        else:
+            fill = WHITE if i == index else DIM
         els.append({
             "id": f"dot{i}", "type": "rectangle",
             "x": 70, "y": i * 2, "width": 2, "height": 1,
             "fill": "solid",
-            "fill_colors": [WHITE if i == index else DIM],
+            "fill_colors": [fill],
             "border_width": 0, "timeout": ELEMENT_TIMEOUT,
         })
     return els

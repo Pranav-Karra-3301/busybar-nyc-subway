@@ -17,9 +17,9 @@ real frame dumps off the hardware, 10× nearest-neighbor.*
   from the BUSY Bar's own pixel fonts, the same shading treatment on every
   line.
 - **Live GTFS-realtime** straight from the MTA. No API key, no account.
-- **One dependency** (`requests`). The GTFS-realtime protobuf is decoded by
-  a ~60-line field walker; the PNGs and compiled `.anim` files are produced
-  by ~150 lines of stdlib.
+- **Tiny footprint** — `requests`, plus `websockets` for the dial. The
+  GTFS-realtime protobuf is decoded by a ~60-line field walker; the PNGs
+  and compiled `.anim` files are produced by ~150 lines of stdlib.
 
 ![Generated route bullets for every line](docs/img/bullets.png)
 
@@ -55,7 +55,7 @@ PUT /api/_manager/apps/nyc-subway/variations/greenpoint
 ### Bare Python
 
 ```sh
-pip install requests            # + `websockets` if you want the dial (USB)
+pip install requests websockets   # websockets = the dial, over USB
 python apps/nyc-subway/app.py --station "Bedford Av" --direction downtown
 ```
 
@@ -94,8 +94,10 @@ With no configuration at all, it shows uptown departures at Times Sq-42 St.
 
 - **Next train, no auto-scroll.** Position dots down the right edge show
   where you are in the upcoming-arrivals list (up to 8 — one dot per 2px of
-  display). Over USB, the Bar's **dial** scrolls through arrivals
-  (optional `websockets` package); 25 s idle snaps back to the soonest.
+  display). When the list spans lines of different colors, **each dot takes
+  its train's line color** (bright = shown, dimmed = the rest); a
+  single-line list keeps the classic white/dim dots. Over USB, the Bar's
+  **dial** scrolls through arrivals; 25 s idle snaps back to the soonest.
 - The minutes digit flips exactly on minute boundaries.
 - **Departure flash**: when the shown train's trip disappears from the feed,
   a compiled `.anim` sweeps the line's color across the display with the
