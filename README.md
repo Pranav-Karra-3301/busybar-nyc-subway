@@ -6,10 +6,11 @@ matrix of a [BUSY Bar](https://busy.app). Pick a station, a direction, and
 bullet, the minutes until it leaves, and a full-screen wipe in the line's
 color when it departs.
 
-![NYC Subway running on a BUSY Bar — real hardware capture](apps/nyc-subway/preview.gif)
+![NYC Subway running on a BUSY Bar — real hardware capture in the device frame](docs/img/device_hero.gif)
 
 *Everything in this README that looks like the display **is** the display —
-real frame dumps off the hardware, 10× nearest-neighbor.*
+real frame dumps off the hardware, re-rendered LED-for-LED into the official
+BUSY Bar device art (geometry per the community gallery's device frame).*
 
 - **Whole-system coverage** — 1–7, A–Z, shuttles, Staten Island Railway.
   Route bullets and departure animations are **generated at startup** for
@@ -25,8 +26,8 @@ real frame dumps off the hardware, 10× nearest-neighbor.*
 
 | | |
 |---|---|
-| ![N and Q at Canal St](docs/img/card_nq.png) | ![Red 1 bullet](docs/img/card_1.png) |
-| ![Departure flash, N](docs/img/flash_n.png) | ![Departure flash, A](docs/img/flash_a.png) |
+| ![N and Q at Canal St](docs/img/device_card_nq.png) | ![Red 1 bullet](docs/img/device_card_1.png) |
+| ![Departure flash, N](docs/img/device_flash_n.png) | ![Departure flash, A](docs/img/device_flash_a.png) |
 
 ## Install
 

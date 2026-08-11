@@ -27,6 +27,13 @@ Route symbols and line colors are trademarks of the Metropolitan
 Transportation Authority; this project is not affiliated with or endorsed by
 the MTA.
 
+Device art
+----------
+docs/brand/busybar-device.png (and the framed captures derived from it) is
+the BUSY Bar device illustration from github.com/maxswinkels/busybar-apps
+(MIT). site/favicon.png is the BUSY app icon (busy.app), used to identify
+the device this community project targets.
+
 BUSY Bar
 --------
 BUSY Bar is a product of Flipper FZCO (https://busy.app). This is a

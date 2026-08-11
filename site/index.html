@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NYC Subway for BUSY Bar</title>
 <meta name="description" content="Live next-train departures for any NYC subway station on a BUSY Bar — MTA route bullets, departure flash, live GTFS-realtime, no API key.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23FCC30B'/><text x='50' y='72' font-size='64' font-family='Arial,sans-serif' font-weight='bold' text-anchor='middle' fill='%23000'>N</text></svg>">
+<link rel="icon" type="image/png" href="favicon.png">
 <style>
   @font-face {
     font-family: "Busy Bold";
@@ -59,15 +59,11 @@
   .tagline { color: #b9b9c2; max-width: 560px; font-size: 19px; }
   .screen {
     margin: 44px 0 36px;
-    background: #000;
-    border: 1px solid #333439;
-    border-radius: 10px;
-    padding: clamp(10px, 3vw, 26px);
-    box-shadow: 0 30px 80px rgba(0,0,0,.45);
+    max-width: 768px;
+    filter: drop-shadow(0 26px 60px rgba(0,0,0,.5));
   }
   .screen img {
     display: block; width: 100%; height: auto;
-    image-rendering: pixelated;
   }
   .btns { display: flex; gap: 14px; flex-wrap: wrap; }
   .btn {
@@ -104,9 +100,8 @@
   }
 
   .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-top: 40px; }
-  .shots figure { background: #000; border-radius: 10px; padding: 12px; border: 1px solid var(--grey-line); }
-  .dark .shots figure { border-color: #333439; }
-  .shots img { width: 100%; display: block; image-rendering: pixelated; }
+  .shots figure { padding: 0; }
+  .shots img { width: 100%; display: block; filter: drop-shadow(0 10px 22px rgba(0,0,0,.3)); }
   .shots figcaption { color: #82828c; font-size: 13.5px; padding-top: 10px; text-align: center; }
 
   pre {
@@ -141,7 +136,7 @@
     <p class="tagline">Live next-train departures for any station in the system,
     on the 72&times;16 LED matrix of a <a href="https://busy.app">BUSY&nbsp;Bar</a>.
     Route bullets, minutes to train, and a full-screen wipe when it leaves.</p>
-    <div class="screen"><img src="img/preview.gif" width="720" height="160"
+    <div class="screen"><img src="img/device_hero.gif" width="768" height="248"
       alt="NYC Subway app running on a BUSY Bar: an N route bullet, NOW, then a yellow departure flash"></div>
     <div class="btns">
       <a class="btn btn-primary" href="https://github.com/Pranav-Karra-3301/busybar-nyc-subway">Get it on GitHub</a>
@@ -181,9 +176,9 @@
         trains over USB &mdash; position dots take each train's line color.</p></div>
     </div>
     <div class="shots">
-      <figure><img src="img/card_nq.png" alt="Yellow N bullet with NOW"><figcaption>Next train, minute-accurate</figcaption></figure>
-      <figure><img src="img/flash_n.png" alt="Yellow N departure flash"><figcaption>Departure flash &mdash; hand-tuned N/Q/G art, kept byte-for-byte</figcaption></figure>
-      <figure><img src="img/flash_a.png" alt="Blue A departure flash"><figcaption>Generated for every other line &mdash; same treatment</figcaption></figure>
+      <figure><img src="img/device_card_nq.png" alt="Yellow N bullet with NOW on the BUSY Bar"><figcaption>Next train, minute-accurate</figcaption></figure>
+      <figure><img src="img/device_flash_n.png" alt="Yellow N departure flash on the BUSY Bar"><figcaption>Departure flash &mdash; hand-tuned N/Q/G art, kept byte-for-byte</figcaption></figure>
+      <figure><img src="img/device_flash_a.png" alt="Blue A departure flash on the BUSY Bar"><figcaption>Generated for every other line &mdash; same treatment</figcaption></figure>
     </div>
   </div>
 </section>
