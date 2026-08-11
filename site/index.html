@@ -4,9 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NYC Subway for BUSY Bar</title>
-<meta name="description" content="Live next-train departures for any NYC subway station on a BUSY Bar — MTA route bullets, departure flash, live GTFS-realtime, no API key.">
+<meta name="description" content="Live next-train departures for any NYC subway station on a BUSY Bar. MTA route bullets, minutes to train, departure flash. Live GTFS realtime data, no API key.">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0e0e10">
+<link rel="canonical" href="https://busybar.pranavkarra.me/">
 <link rel="icon" type="image/png" href="favicon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="NYC Subway for BUSY Bar">
+<meta property="og:title" content="NYC Subway for BUSY Bar">
+<meta property="og:description" content="Live next-train departures for any NYC subway station, on the 72x16 LED matrix of a BUSY Bar.">
+<meta property="og:url" content="https://busybar.pranavkarra.me/">
+<meta property="og:image" content="https://busybar.pranavkarra.me/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="NYC Subway app showing an N train departure on a BUSY Bar LED matrix">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="NYC Subway for BUSY Bar">
+<meta name="twitter:description" content="Live next-train departures for any NYC subway station, on the 72x16 LED matrix of a BUSY Bar.">
+<meta name="twitter:image" content="https://busybar.pranavkarra.me/og.png">
 <style>
   :root {
     --bg: #0e0e10;
@@ -144,6 +159,18 @@
     color: var(--ink);
   }
   .config-table td:first-child { white-space: nowrap; }
+  .after-note { color: var(--faint); font-size: 14px; text-align: center; margin-top: 28px; }
+  .after-note a { color: var(--muted); }
+
+  .specs { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; max-width: 700px; margin: 0 auto; }
+  .specs li {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 10px 20px;
+    font-size: 14.5px;
+    color: var(--muted);
+  }
 
   footer { border-top: 1px solid var(--line); color: var(--faint); padding: 48px 0 64px; font-size: 13.5px; text-align: center; }
   footer a { color: var(--muted); text-decoration: none; }
@@ -172,15 +199,15 @@
 <figure class="strip">
   <div class="wrap">
     <img src="img/bullets.png" alt="Generated route bullets for every NYC subway line: 1-7, A-Z, shuttles, SIR">
-    <figcaption>Every line, generated at startup &mdash; official MTA colors, glyphs from the Bar's own fonts.</figcaption>
+    <figcaption>Every line, generated at startup in official MTA colors.</figcaption>
   </div>
 </figure>
 
 <section>
   <div class="wrap">
     <h2>Pick a station. That's it.</h2>
-    <p class="lede">Station, direction, and optionally the lines you care about —
-    straight from the MTA's realtime feeds. No API key, no account.</p>
+    <p class="lede">Station, direction, lines. The app does the rest, straight
+    from the MTA's realtime feeds. No API key, no account.</p>
     <div class="grid">
       <div class="card">
         <h3>The whole system</h3>
@@ -194,7 +221,7 @@
       <div class="card">
         <h3>Departures at 60 fps</h3>
         <p>When a train leaves, a compiled <code>.anim</code> sweeps the line's
-        color across the display &mdash; played by the device itself, smooth over
+        color across the display, played by the device itself. Smooth over
         USB, Wi&#8209;Fi, or cloud.</p></div>
       <div class="card">
         <h3>Polite by default</h3>
@@ -216,37 +243,33 @@
     <p class="lede">Environment variables, or CLI flags. In
     <a href="https://github.com/maxswinkels/busybar-manager">busybar-manager</a>,
     make each station a variation and switch from the dashboard.</p>
-<pre><span class="cm"># bare python — finds the Bar over USB, Wi-Fi, or cloud</span>
+<pre><span class="cm"># finds the Bar over USB, Wi-Fi, or cloud</span>
 pip install requests websockets
 <span class="org">STATION</span>=<span class="hl">"Bedford Av"</span> <span class="org">DIRECTION</span>=<span class="hl">downtown</span> python app.py</pre>
-<pre><span class="cm"># busybar-manager: this repo is a library source; stations are variations</span>
-POST /api/_manager/library/repos   {"repo": "Pranav-Karra-3301/busybar-nyc-subway"}
-POST /api/_manager/library/install {"slug": "nyc-subway"}
-PUT  /api/_manager/apps/nyc-subway/variations/canal-st
-     {"env": {"STATION": "Canal St", "DIRECTION": "uptown", "ROUTES": "N,Q"}, "priority": 30}</pre>
     <table class="config-table">
       <tr><th>Var</th><th>Meaning</th></tr>
-      <tr><td><code>STATION</code></td><td>Station name, fuzzily matched &mdash; all platforms of same-named stations merge</td></tr>
-      <tr><td><code>DIRECTION</code></td><td><code>N</code> / <code>S</code> / <code>uptown</code> / <code>downtown</code>, or a destination label like <code>Brooklyn</code></td></tr>
-      <tr><td><code>ROUTES</code></td><td>Optional filter (<code>N,Q</code>); default is every route the station serves</td></tr>
-      <tr><td><code>STOPS</code></td><td>Exact GTFS platform ids (<code>Q01N,R23N</code>) for full control</td></tr>
-      <tr><td><code>BUSYBAR_PRIORITY</code></td><td><code>1</code> = only when the Bar is OFF (default) &middot; <code>30+</code> = over the clock</td></tr>
+      <tr><td><code>STATION</code></td><td>Station name, fuzzily matched</td></tr>
+      <tr><td><code>DIRECTION</code></td><td><code>N</code> / <code>S</code> / <code>uptown</code> / <code>downtown</code>, or a label like <code>Brooklyn</code></td></tr>
+      <tr><td><code>ROUTES</code></td><td>Optional filter like <code>N,Q</code></td></tr>
+      <tr><td><code>STOPS</code></td><td>Exact GTFS platform ids, for full control</td></tr>
+      <tr><td><code>BUSYBAR_PRIORITY</code></td><td><code>1</code> shows only when the Bar is OFF, <code>30+</code> shows over the clock</td></tr>
     </table>
+    <p class="after-note">Manager setup and the full reference live in the
+    <a href="https://github.com/Pranav-Karra-3301/busybar-nyc-subway#readme">README</a>.</p>
   </div>
 </section>
 
 <section>
   <div class="wrap">
     <h2>Made for the hardware</h2>
-    <p class="lede">The BUSY Bar is an open device: a 72&times;16 RGB LED matrix, a
-    160&times;80 back OLED, and an HTTP API over USB, LAN, and cloud.</p>
-    <table>
-      <tr><th>Front display</th><td>72&times;16 RGB LED matrix &middot; 60 Hz &middot; adaptive brightness &middot; element lists that merge by id</td></tr>
-      <tr><th>Departure flash</th><td>Firmware <code>bicycle0</code> <code>.anim</code> &mdash; RLE frames, ~15 KiB per route, compiled by a stdlib port of the firmware's own encoder</td></tr>
-      <tr><th>Glyphs</th><td>Extracted from the Bar's LVGL pixel fonts (OFL&#8209;1.1) &mdash; a generated "W" is the letter the device itself would draw</td></tr>
-      <tr><th>Assets</th><td>Uploaded once, content-hash named, diffed against device storage on start</td></tr>
-      <tr><th>Every image here</th><td>A real frame dump off the hardware (<code>GET /api/screen</code>), re-rendered LED-for-LED into the official device art</td></tr>
-    </table>
+    <p class="lede">The BUSY Bar is an open device with an HTTP API over USB,
+    LAN, and cloud. This app speaks it natively.</p>
+    <ul class="specs">
+      <li>72&times;16 RGB LED matrix at 60 Hz</li>
+      <li>Departure flash played on-device</li>
+      <li>Glyphs from the Bar's own pixel fonts</li>
+      <li>Every image here is a real frame dump</li>
+    </ul>
   </div>
 </section>
 

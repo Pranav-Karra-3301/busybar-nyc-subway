@@ -4,8 +4,11 @@
   "name": "busybar-nyc-subway",
   "account_id": "ed61a2220d42b5b8a61059cce9af9980",
   "compatibility_date": "2026-08-01",
+  "main": "worker.js",
   "assets": {
-    "directory": "./site"
+    "directory": "./site",
+    "binding": "ASSETS",
+    "run_worker_first": true
   },
   "routes": [
     { "pattern": "busybar.pranavkarra.me", "custom_domain": true }
