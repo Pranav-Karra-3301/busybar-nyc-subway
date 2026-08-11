@@ -214,11 +214,15 @@ same pipeline as every other line. Everything is generated at startup by
    automatically for any station that serves their local). The letter is
    stamped in **white** over the firmware's baked drop-shadow ratios (×0.43
    below, ×0.78 beside, ×0.76 two below — the same treatment the stock
-   assets give the BUSY wordmark), positioned by the per-icon nudges in the
-   `LETTER_OFFSETS` block. Tune those visually with
-   `tools/bullet_editor.py`, which renders every icon through this exact
-   pipeline with an LED-dot preview and bakes your nudges back into the
-   source.
+   assets give the BUSY wordmark). Each icon carries its own tuning:
+   position nudges (`LETTER_OFFSETS`) and a glyph size (`LETTER_SIZES` —
+   tiny ~3×4, bold 7 px, or XL 10 px, all straight from the Bar's own
+   `busy_tiny`/`busy_bold_7`/`busy_bold_10` fonts, never rescaled; the
+   shipped tuning runs XL letters on the disks, bold inside the diamonds).
+   Tune both visually with `tools/bullet_editor.py`: every icon renders
+   through this exact pipeline with an LED-dot preview, arrow keys nudge,
+   1/2/3 resize, and it can push any candidate icon to the physical Bar
+   for a few seconds before baking the numbers back into the source.
 3. **Departure flash** — a 72×16 shaded field with vignette and rounded
    corners; locals carry the 10px glyph, expresses the diamond-outline mark
    with the small letter inside, compiled into a 111-frame sweep/hold/fade
