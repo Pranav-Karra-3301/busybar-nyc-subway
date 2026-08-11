@@ -2,6 +2,7 @@
   // Landing page: static assets served by a Cloudflare Worker.
   // Deploy: npx wrangler login && npx wrangler deploy
   "name": "busybar-nyc-subway",
+  "account_id": "ed61a2220d42b5b8a61059cce9af9980",
   "compatibility_date": "2026-08-01",
   "assets": {
     "directory": "./site",
