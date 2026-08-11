@@ -5,17 +5,14 @@ Code: MIT (see LICENSE).
 
 Fonts
 -----
-site/fonts/busy_bold_10px.ttf and site/fonts/busy_regular_7px.ttf are the
-BUSY Bar UI pixel fonts, redistributed unmodified under the SIL Open Font
-License 1.1 (https://openfontlicense.org):
+The route-glyph bitmaps baked into apps/nyc-subway/app.py were derived from
+the BUSY Bar UI pixel fonts (busy_bold_7.font, busy_bold_10.font), licensed
+under the SIL Open Font License 1.1 (https://openfontlicense.org):
 
   Copyright (c) 2021 TakWolf (https://takwolf.com),
     with Reserved Font Name "Ark Pixel" (ark-pixel-font.takwolf.com)
   Copyright (c) 2024-2026 Flipper FZCO, from
     github.com/busy-app/busybar-firmware (assets/shared/fonts, OFL-1.1)
-
-The route-glyph bitmaps baked into apps/nyc-subway/app.py were derived from
-the same OFL-1.1 fonts (busy_bold_7.font, busy_bold_10.font).
 
 Transit data
 ------------

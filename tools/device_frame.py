@@ -27,9 +27,13 @@ ROOT = Path(__file__).resolve().parent.parent
 DEVICE = ROOT / "docs" / "brand" / "busybar-device.png"
 
 SS = 16            # supersample: px per LED cell while drawing
-DOT_R = 0.42       # lit-dot radius, in cells
-HALO_R = 0.66      # lit-dot halo radius, in cells
-OFF_R = 0.34       # unlit-dot radius, in cells
+# Every dot stays inside its own cell (like the physical panel: distinct
+# LEDs with a thin dark gap) — the halo is capped at the cell boundary so
+# neighboring dots never overlap.
+DOT_R = 0.39       # lit-dot radius, in cells
+HALO_R = 0.50      # lit-dot halo radius, in cells (cell boundary)
+HALO_A = 54        # halo alpha
+OFF_R = 0.33       # unlit-dot radius, in cells
 OFF_COLOR = (26, 26, 29, 255)
 SCREEN_W_FRAC = 0.935   # from the gallery's .device-screen CSS
 SCREEN_CY_FRAC = 0.5685
@@ -62,7 +66,7 @@ def dotted(grid: Image.Image, w: int, h: int) -> Image.Image:
             if max(c) <= 8:
                 dot(cx, cy, OFF_R * SS, OFF_COLOR)
             else:
-                dot(cx, cy, HALO_R * SS, (*c, 70))
+                dot(cx, cy, HALO_R * SS, (*c, HALO_A))
                 dot(cx, cy, DOT_R * SS, (*c, 255))
     return big.resize((w, h), Image.LANCZOS)
 
@@ -92,7 +96,7 @@ def strip(im: Image.Image, cell: int = 10, pad: int = 2) -> Image.Image:
     d.rounded_rectangle((0, 0, big.size[0] - 1, big.size[1] - 1),
                         radius=(pad + 2) * SS, fill=(10, 10, 12, 255))
     px = im.load()
-    core, halo = 0.46, 0.56
+    core, halo = 0.44, 0.50
     for y in range(h):
         for x in range(w):
             r, g, b, a = px[x, y]
@@ -102,7 +106,7 @@ def strip(im: Image.Image, cell: int = 10, pad: int = 2) -> Image.Image:
                            cx + OFF_R * SS, cy + OFF_R * SS), fill=(22, 22, 25, 255))
             else:
                 d.ellipse((cx - halo * SS, cy - halo * SS,
-                           cx + halo * SS, cy + halo * SS), fill=(r, g, b, 34))
+                           cx + halo * SS, cy + halo * SS), fill=(r, g, b, 30))
                 d.ellipse((cx - core * SS, cy - core * SS,
                            cx + core * SS, cy + core * SS), fill=(r, g, b, 255))
     return big.resize(((w + 2 * pad) * cell, (h + 2 * pad) * cell), Image.LANCZOS)

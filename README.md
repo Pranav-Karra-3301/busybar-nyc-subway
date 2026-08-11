@@ -6,11 +6,13 @@ matrix of a [BUSY Bar](https://busy.app). Pick a station, a direction, and
 bullet, the minutes until it leaves, and a full-screen wipe in the line's
 color when it departs.
 
-![NYC Subway running on a BUSY Bar — real hardware capture in the device frame](docs/img/device_hero.gif)
+<p align="center">
+  <img src="docs/img/device_hero.gif" width="720" alt="NYC Subway running on a BUSY Bar — real hardware capture in the device frame">
+</p>
 
-*Everything in this README that looks like the display **is** the display —
+<p align="center"><em>Everything in this README that looks like the display is the display —
 real frame dumps off the hardware, re-rendered LED-for-LED into the official
-BUSY Bar device art (geometry per the community gallery's device frame).*
+BUSY Bar device art (geometry per the community gallery's device frame).</em></p>
 
 - **Whole-system coverage** — 1–7, A–Z, shuttles, Staten Island Railway.
   Route bullets and departure animations are **generated at startup** for
@@ -22,12 +24,18 @@ BUSY Bar device art (geometry per the community gallery's device frame).*
   GTFS-realtime protobuf is decoded by a ~60-line field walker; the PNGs
   and compiled `.anim` files are produced by ~150 lines of stdlib.
 
-![Generated route bullets for every line](docs/img/bullets.png)
+<p align="center">
+  <img src="docs/img/bullets.png" width="900" alt="Generated route bullets for every line">
+</p>
 
-| | |
-|---|---|
-| ![N and Q at Canal St](docs/img/device_card_nq.png) | ![Red 1 bullet](docs/img/device_card_1.png) |
-| ![Departure flash, N](docs/img/device_flash_n.png) | ![Departure flash, A](docs/img/device_flash_a.png) |
+<p align="center">
+  <img src="docs/img/device_card_nq.png" width="390" alt="N and Q at Canal St">
+  <img src="docs/img/device_card_1.png" width="390" alt="Red 1 bullet">
+</p>
+<p align="center">
+  <img src="docs/img/device_flash_n.png" width="390" alt="Departure flash, N">
+  <img src="docs/img/device_flash_a.png" width="390" alt="Departure flash, A">
+</p>
 
 ## Install
 
