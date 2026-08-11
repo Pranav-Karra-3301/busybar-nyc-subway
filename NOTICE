@@ -1,0 +1,34 @@
+busybar-nyc-subway — attribution notices
+========================================
+
+Code: MIT (see LICENSE).
+
+Fonts
+-----
+site/fonts/busy_bold_10px.ttf and site/fonts/busy_regular_7px.ttf are the
+BUSY Bar UI pixel fonts, redistributed unmodified under the SIL Open Font
+License 1.1 (https://openfontlicense.org):
+
+  Copyright (c) 2021 TakWolf (https://takwolf.com),
+    with Reserved Font Name "Ark Pixel" (ark-pixel-font.takwolf.com)
+  Copyright (c) 2024-2026 Flipper FZCO, from
+    github.com/busy-app/busybar-firmware (assets/shared/fonts, OFL-1.1)
+
+The route-glyph bitmaps baked into apps/nyc-subway/app.py were derived from
+the same OFL-1.1 fonts (busy_bold_7.font, busy_bold_10.font).
+
+Transit data
+------------
+Live departures and the station directory use data provided by
+MTA New York City Transit (https://api.mta.info):
+  - GTFS-realtime feeds (api-endpoint.mta.info, no API key required)
+  - Stations.csv (web.mta.info/developers, mirrored on data.ny.gov)
+Route symbols and line colors are trademarks of the Metropolitan
+Transportation Authority; this project is not affiliated with or endorsed by
+the MTA.
+
+BUSY Bar
+--------
+BUSY Bar is a product of Flipper FZCO (https://busy.app). This is a
+third-party community app driving the device over its public HTTP API; it is
+not affiliated with or endorsed by Flipper FZCO.

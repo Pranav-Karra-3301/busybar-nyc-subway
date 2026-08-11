@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NYC Subway for BUSY Bar</title>
+<meta name="description" content="Live next-train departures for any NYC subway station on a BUSY Bar — MTA route bullets, departure flash, live GTFS-realtime, no API key.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23FCC30B'/><text x='50' y='72' font-size='64' font-family='Arial,sans-serif' font-weight='bold' text-anchor='middle' fill='%23000'>N</text></svg>">
+<style>
+  @font-face {
+    font-family: "Busy Bold";
+    src: url("fonts/busy_bold_10px.ttf") format("truetype");
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "Busy Regular";
+    src: url("fonts/busy_regular_7px.ttf") format("truetype");
+    font-display: swap;
+  }
+  :root {
+    --bg: #f5f5f7;
+    --ink: #000;
+    --dark: #141517;
+    --dark-2: #1c1d22;
+    --primary: #ea5212;
+    --muted: #7a7a86;
+    --grey-line: #e0e0e4;
+    --yellow: #FCC30B;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    line-height: 1.6;
+    font-size: 17px;
+  }
+  .pixel {
+    font-family: "Busy Bold", monospace;
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+    font-weight: normal;
+    letter-spacing: 0.02em;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
+  a { color: inherit; }
+
+  /* hero */
+  .hero { background: var(--dark); color: #fff; padding: 88px 0 72px; }
+  .eyebrow {
+    color: var(--primary);
+    font-family: "Busy Regular", monospace;
+    -webkit-font-smoothing: none;
+    font-size: 14px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+  }
+  h1 { font-size: clamp(40px, 7vw, 70px); line-height: 1.05; margin: 18px 0 20px; }
+  .tagline { color: #b9b9c2; max-width: 560px; font-size: 19px; }
+  .screen {
+    margin: 44px 0 36px;
+    background: #000;
+    border: 1px solid #333439;
+    border-radius: 10px;
+    padding: clamp(10px, 3vw, 26px);
+    box-shadow: 0 30px 80px rgba(0,0,0,.45);
+  }
+  .screen img {
+    display: block; width: 100%; height: auto;
+    image-rendering: pixelated;
+  }
+  .btns { display: flex; gap: 14px; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; text-decoration: none;
+    padding: 13px 26px; border-radius: 999px; font-weight: 600; font-size: 16px;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: #eb5819; }
+  .btn-ghost { border: 1px solid #3f3f44; color: #fff; }
+  .btn-ghost:hover { border-color: #82828c; }
+
+  /* bullets strip */
+  .strip { background: #000; padding: 26px 0; overflow-x: auto; }
+  .strip img { display: block; height: 64px; image-rendering: pixelated; margin: 0 auto; }
+
+  /* sections */
+  section.light { padding: 84px 0; }
+  section.dark { background: var(--dark); color: #fff; padding: 84px 0; }
+  h2 { font-size: clamp(26px, 4vw, 40px); margin-bottom: 14px; }
+  .lede { color: var(--muted); max-width: 640px; margin-bottom: 44px; font-size: 18px; }
+  .dark .lede { color: #b9b9c2; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; }
+  .card {
+    background: #fff; border: 1px solid var(--grey-line); border-radius: 16px;
+    padding: 26px 24px;
+  }
+  .card h3 { font-size: 18px; margin-bottom: 8px; }
+  .card p { color: var(--muted); font-size: 15.5px; }
+  .card .k {
+    font-family: "Busy Regular", monospace; -webkit-font-smoothing: none;
+    color: var(--primary); font-size: 13px; letter-spacing: .18em;
+    text-transform: uppercase; display: block; margin-bottom: 14px;
+  }
+
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-top: 40px; }
+  .shots figure { background: #000; border-radius: 10px; padding: 12px; border: 1px solid var(--grey-line); }
+  .dark .shots figure { border-color: #333439; }
+  .shots img { width: 100%; display: block; image-rendering: pixelated; }
+  .shots figcaption { color: #82828c; font-size: 13.5px; padding-top: 10px; text-align: center; }
+
+  pre {
+    background: var(--dark-2); color: #e5e5ea; border-radius: 12px;
+    padding: 22px 24px; overflow-x: auto; font-size: 14px; line-height: 1.55;
+    font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    border: 1px solid #26272d;
+  }
+  pre + pre { margin-top: 14px; }
+  .cm { color: #82828c; }
+  .hl { color: var(--yellow); }
+  .org { color: #ff8a50; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 15.5px; }
+  th, td { text-align: left; padding: 12px 14px 12px 0; border-bottom: 1px solid var(--grey-line); vertical-align: top; }
+  .dark th, .dark td { border-color: #26272d; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; background: rgba(127,127,140,.14); border-radius: 5px; padding: 1px 6px; }
+
+  footer { background: #000; color: #82828c; padding: 46px 0 60px; font-size: 14px; }
+  footer a { color: #b9b9c2; }
+  footer p { max-width: 760px; }
+  .foot-links { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 22px; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Busy Bar &middot; community app</div>
+    <h1 class="pixel">NYC SUBWAY</h1>
+    <p class="tagline">Live next-train departures for any station in the system,
+    on the 72&times;16 LED matrix of a <a href="https://busy.app">BUSY&nbsp;Bar</a>.
+    Route bullets, minutes to train, and a full-screen wipe when it leaves.</p>
+    <div class="screen"><img src="img/preview.gif" width="720" height="160"
+      alt="NYC Subway app running on a BUSY Bar: an N route bullet, NOW, then a yellow departure flash"></div>
+    <div class="btns">
+      <a class="btn btn-primary" href="https://github.com/Pranav-Karra-3301/busybar-nyc-subway">Get it on GitHub</a>
+      <a class="btn btn-ghost" href="https://github.com/maxswinkels/busybar-apps">busybar-apps gallery</a>
+    </div>
+  </div>
+</header>
+
+<div class="strip"><div class="wrap">
+  <img src="img/bullets.png" alt="Generated route bullets for every NYC subway line: 1-7, A-Z, shuttles, SIR">
+</div></div>
+
+<section class="light">
+  <div class="wrap">
+    <h2>Every line. One dependency.</h2>
+    <p class="lede">Pick a station, a direction, and optionally the lines you care
+    about — the app does the rest, straight from the MTA's realtime feeds.
+    No API key, no account, nothing to build.</p>
+    <div class="grid">
+      <div class="card"><span class="k">Coverage</span>
+        <h3>The whole system</h3>
+        <p>1&ndash;7, A&ndash;Z, the shuttles, the Staten Island Railway. A 496-station
+        directory is baked in; multi-line stations like Canal St just work.</p></div>
+      <div class="card"><span class="k">Art</span>
+        <h3>Real MTA bullets</h3>
+        <p>Bullets and departure animations are generated at startup in official
+        line colors, with glyphs taken from the Bar's own pixel fonts &mdash;
+        for exactly the routes your station serves.</p></div>
+      <div class="card"><span class="k">Motion</span>
+        <h3>60 fps departures</h3>
+        <p>The departure flash is a compiled <code>.anim</code> the device plays
+        itself &mdash; buttery over USB, Wi-Fi, or the cloud relay alike.</p></div>
+      <div class="card"><span class="k">Manners</span>
+        <h3>Polite by default</h3>
+        <p>Draws at priority 1: the board owns the display when the switch is on
+        OFF and yields politely to everything else. The dial scrolls upcoming
+        trains over USB.</p></div>
+    </div>
+    <div class="shots">
+      <figure><img src="img/card_nq.png" alt="Yellow N bullet with NOW"><figcaption>Next train, minute-accurate</figcaption></figure>
+      <figure><img src="img/flash_n.png" alt="Yellow N departure flash"><figcaption>Departure flash &mdash; hand-tuned N/Q/G art, kept byte-for-byte</figcaption></figure>
+      <figure><img src="img/flash_a.png" alt="Blue A departure flash"><figcaption>Generated for every other line &mdash; same treatment</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="dark">
+  <div class="wrap">
+    <h2>Configured in seconds</h2>
+    <p class="lede">Environment variables (or CLI flags). In
+    <a href="https://github.com/maxswinkels/busybar-manager">busybar-manager</a>,
+    make each station a variation and switch from the dashboard.</p>
+<pre><span class="cm"># bare python — finds the Bar over USB, Wi-Fi, or cloud</span>
+pip install requests
+<span class="org">STATION</span>=<span class="hl">"Bedford Av"</span> <span class="org">DIRECTION</span>=<span class="hl">downtown</span> python app.py</pre>
+<pre><span class="cm"># busybar-manager: this repo is a library source; stations are variations</span>
+POST /api/_manager/library/repos   {"repo": "Pranav-Karra-3301/busybar-nyc-subway"}
+POST /api/_manager/library/install {"slug": "nyc-subway"}
+PUT  /api/_manager/apps/nyc-subway/variations/canal-st
+     {"env": {"STATION": "Canal St", "DIRECTION": "uptown", "ROUTES": "N,Q"}, "priority": 30}</pre>
+    <div style="height:34px"></div>
+    <table>
+      <tr><th>Var</th><th>Meaning</th></tr>
+      <tr><td><code>STATION</code></td><td>Station name, fuzzily matched &mdash; all platforms of same-named stations merge</td></tr>
+      <tr><td><code>DIRECTION</code></td><td><code>N</code> / <code>S</code> / <code>uptown</code> / <code>downtown</code>, or a destination label like <code>Brooklyn</code></td></tr>
+      <tr><td><code>ROUTES</code></td><td>Optional filter (<code>N,Q</code>); default is every route the station serves</td></tr>
+      <tr><td><code>STOPS</code></td><td>Exact GTFS platform ids (<code>Q01N,R23N</code>) for full control</td></tr>
+      <tr><td><code>BUSYBAR_PRIORITY</code></td><td><code>1</code> = only when the Bar is OFF (default) &middot; <code>30+</code> = over the clock</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="light">
+  <div class="wrap">
+    <h2>Made for the hardware</h2>
+    <p class="lede">The BUSY Bar is an open device: a 72&times;16 RGB LED matrix,
+    a 160&times;80 back OLED, and an HTTP API over USB, LAN, and cloud. This app
+    speaks it natively.</p>
+    <table>
+      <tr><th>Front display</th><td>72&times;16 RGB LED matrix &middot; 60 Hz &middot; adaptive brightness &middot; drawn via element lists that merge by id</td></tr>
+      <tr><th>Departure flash</th><td>Firmware <code>bicycle0</code> <code>.anim</code> &mdash; RLE frames, ~15 KiB per route, compiled by a stdlib port of the firmware's own encoder</td></tr>
+      <tr><th>Glyphs</th><td>Extracted from the Bar's LVGL pixel fonts (<code>busy_bold_7</code>/<code>_10</code>, OFL-1.1) &mdash; a generated "W" is the letter the device itself would draw</td></tr>
+      <tr><th>Assets</th><td>Uploaded once, content-hash named, diffed against the device's storage on start</td></tr>
+      <tr><th>Every image on this page</th><td>A real frame dump off the hardware (<code>GET /api/screen</code>), 10&times; nearest-neighbor</td></tr>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-links">
+      <a href="https://github.com/Pranav-Karra-3301/busybar-nyc-subway">GitHub</a>
+      <a href="https://github.com/maxswinkels/busybar-apps">Community gallery</a>
+      <a href="https://busy.app">busy.app</a>
+      <a href="https://github.com/Pranav-Karra-3301/busybar-nyc-subway/blob/main/NOTICE">Licenses &amp; notices</a>
+    </div>
+    <p>MIT-licensed community project. Pixel fonts &copy; TakWolf (Ark Pixel) and Flipper FZCO,
+    SIL OFL 1.1. Transit data provided by MTA New York City Transit; route symbols are MTA
+    trademarks. Not affiliated with the MTA or Flipper FZCO.</p>
+  </div>
+</footer>
+
+</body>
+</html>

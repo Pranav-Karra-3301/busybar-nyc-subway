@@ -1,0 +1,61 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # the app must import and answer --help on a bare interpreter —
+      # busybar-manager probes it with the system python, no venv
+      - name: compile + help probe (stdlib only)
+        run: |
+          python -m py_compile apps/nyc-subway/app.py
+          python apps/nyc-subway/app.py --help > /dev/null
+          python apps/nyc-subway/app.py --list-stations "canal" | grep -q Q01
+      - name: art parity (hand-tuned N/Q/G reproduce byte-for-byte)
+        run: |
+          python - <<'EOF'
+          import hashlib, sys
+          sys.path.insert(0, "apps/nyc-subway")
+          import app
+          WANT = {
+              "N": ("5cb5cd2f2da1ffe9d5a4720c6c9aa5d5176c6088552d873adf235b91f31c7f73",
+                    "9913226b212894e2e509a8da04856e3e373b98e46ddcc6a8b08d59fe7ded9b40"),
+              "Q": ("f543d72ecf3cf933def94891c5731133e38af3c2a72646ce499ed6707d9f24bf",
+                    "ef1465dc67d737d0e97e12146101ef4b5c07357ca12fe003b40a6d40046234f5"),
+              "G": ("644b21d07dbddaeab54c0d2a08e8a4d17d874a1076ea20ea7e80aa4b6b301648",
+                    "90588c3c1f67bca5897c7d10e8a4a39a9afd036bd612eb5b033fe9f17ebfb732"),
+          }
+          for d, (wb, wa) in WANT.items():
+              assert hashlib.sha256(app.make_bullet(d)).hexdigest() == wb, f"bullet {d}"
+              anim = app.anim_encode(app.flash_anim_frames(d), 72, 16)
+              assert hashlib.sha256(anim).hexdigest() == wa, f"flash {d}"
+          # every designator must generate cleanly and stay inside the
+          # ~120 KiB cloud-relay budget
+          for d in app.DESIGNATOR_META:
+              assert len(app.make_bullet(d)) < 2048
+              assert len(app.anim_encode(app.flash_anim_frames(d), 72, 16)) < 120 * 1024
+          print("parity + generation OK for", len(app.DESIGNATOR_META), "designators")
+          EOF
+      - name: config resolution smoke test
+        run: |
+          python - <<'EOF'
+          import sys
+          sys.path.insert(0, "apps/nyc-subway")
+          import app
+          cfg = app.resolve_config("Canal St", "uptown", "N,Q", "")
+          assert {"Q01N", "R23N"} <= set(cfg["stops"]), cfg["stops"]
+          assert cfg["designators"] == ["N", "Q"]
+          cfg = app.resolve_config("Greenpoint Av", "downtown", "", "")
+          assert cfg["stops"] == ["G26S"] and cfg["dir_word"] == "Church Av"
+          cfg = app.resolve_config("", "", "", "Q01N,R23N")
+          assert set(cfg["designators"]) == {"N", "Q", "R", "W"}
+          print("config resolution OK")
+          EOF
