@@ -6,9 +6,15 @@ Sources:
                                      15x15 route disks)
   - tools/data/busy_bold_10.font  -> XL_GLYPHS (the big letter riding the
                                      departure flash)
-  - ~/busybar/app/canal_trains.py + g_trains.py -> BULLET_OVERRIDES (the
-    hand-tuned 15x15 N/Q/G disk PNGs, kept verbatim) and the disk alpha mask
-    every generated bullet is drawn on
+  - tools/data/busy_tiny.font     -> TINY_GLYPHS (the small size option in
+                                     the bullet editor; chars the tiny font
+                                     lacks simply don't get an entry)
+  - ~/busybar/app/canal_trains.py + g_trains.py -> BULLET_GLYPH_OVERRIDES
+    (the hand-tuned N/Q/G letterforms, lifted as masks out of the legacy
+    15x15 disk PNGs' black pixels) and the disk alpha mask every generated
+    bullet is drawn on. Letterforms that match the font glyph (N) emit no
+    override; hand-tuned POSITIONS ride in app.py's LETTER_OFFSETS block,
+    which belongs to tools/bullet_editor.py and is not rewritten here.
 
 The fonts are lv_font_conv "bin" format (head/cmap/loca/glyf); the busy_*
 fonts ship in busy-app/busybar-firmware under OFL-1.1. The glyf bitstream per
@@ -27,7 +33,6 @@ import io
 import re
 import struct
 import sys
-import textwrap
 import zlib
 from pathlib import Path
 
@@ -190,6 +195,24 @@ def disk_mask(png: bytes) -> list[str]:
             for y in range(h)]
 
 
+def letter_mask(png: bytes) -> tuple[list[str], tuple[int, int]]:
+    """(rows, (x0, y0)) of a legacy bullet's letter — its pure-black pixels.
+    Safe classifier: the shaded ramps never reach #000000 inside the disk."""
+    from PIL import Image
+    img = Image.open(io.BytesIO(png)).convert("RGBA")
+    w, h = img.size
+    px = img.load()
+    ink = {(x, y) for y in range(h) for x in range(w)
+           if px[x, y] == (0, 0, 0, 255)}
+    if not ink:
+        raise SystemExit("no letter pixels found in legacy bullet")
+    x0, x1 = min(x for x, _ in ink), max(x for x, _ in ink)
+    y0, y1 = min(y for _, y in ink), max(y for _, y in ink)
+    rows = ["".join("#" if (x, y) in ink else "."
+                    for x in range(x0, x1 + 1)) for y in range(y0, y1 + 1)]
+    return rows, (x0, y0)
+
+
 def glyph_dict_src(name: str, glyphs: dict[str, list[str]]) -> str:
     lines = [f"{name} = {{"]
     for ch in sorted(glyphs):
@@ -197,12 +220,6 @@ def glyph_dict_src(name: str, glyphs: dict[str, list[str]]) -> str:
         lines.append(f'    "{ch}": [{rows}],')
     lines.append("}")
     return "\n".join(lines)
-
-
-def b64_src(name: str, blob: bytes, indent: str = "    ") -> str:
-    enc = base64.b64encode(blob).decode()
-    body = "\n".join(f'{indent}"{ln}"' for ln in textwrap.wrap(enc, 68))
-    return f"{name} = base64.b64decode(\n{body}\n)"
 
 
 def replace_marker(src: str, name: str, body: str) -> str:
@@ -226,6 +243,8 @@ def main() -> None:
     xl = {ch: trim(rows)
           for ch, rows in font_glyphs(DATA / "busy_bold_10.font").items()}
     xl.update(XL_OVERRIDES)
+    tiny = {ch: trim(rows)
+            for ch, rows in font_glyphs(DATA / "busy_tiny.font").items()}
 
     if args.preview:
         for label, table in (("BULLET (busy_bold_7)", bullet),
@@ -245,26 +264,36 @@ def main() -> None:
         if m2 != mask:
             print(f"note: bullet_{r} disk mask differs from N's", file=sys.stderr)
 
+    glyph_overrides = {}
+    for route, png in sorted(overrides.items()):
+        rows, (x0, y0) = letter_mask(png)
+        gw, gh = len(rows[0]), len(rows)
+        cx, cy = (15 - gw) // 2, (15 - gh) // 2
+        where = (f"{gw}x{gh} at ({x0},{y0})"
+                 + ("" if (x0, y0) == (cx, cy)
+                    else f" = centered {x0 - cx:+d},{y0 - cy:+d}"
+                         " (ride in LETTER_OFFSETS)"))
+        if rows == bullet.get(route):
+            print(f"letter {route}: {where} — matches the font glyph")
+            continue
+        glyph_overrides[route] = rows
+        print(f"letter {route}: {where} — hand-tuned override")
+
     src = APP.read_text()
     body = "\n".join([
         glyph_dict_src("BULLET_GLYPHS", bullet),
         glyph_dict_src("XL_GLYPHS", xl),
+        glyph_dict_src("TINY_GLYPHS", tiny),
         glyph_dict_src("DISK_MASK_ROWS", {"@": mask}).replace(
             'DISK_MASK_ROWS = {\n    "@": [', "DISK_MASK = ["
         ).replace("],\n}", "]"),
-        "BULLET_OVERRIDES = {",
-        *(f'    "{route}": base64.b64decode(\n'
-          + "\n".join(f'        "{ln}"'
-                      for ln in textwrap.wrap(base64.b64encode(png).decode(), 68))
-          + "\n    ),"
-          for route, png in sorted(overrides.items())),
-        "}",
+        glyph_dict_src("BULLET_GLYPH_OVERRIDES", glyph_overrides),
     ])
     APP.write_text(replace_marker(src, "GLYPHS", body))
     n_b = len(bullet)
     print(f"wrote GLYPHS: {n_b} bullet glyphs, {len(xl)} XL glyphs "
-          f"({len(XL_OVERRIDES)} overridden), disk mask 15x15, "
-          f"{len(overrides)} legacy bullets")
+          f"({len(XL_OVERRIDES)} overridden), {len(tiny)} tiny glyphs, "
+          f"disk mask 15x15, {len(glyph_overrides)} hand-tuned letterforms")
 
 
 if __name__ == "__main__":

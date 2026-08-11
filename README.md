@@ -200,31 +200,44 @@ Things this app leans on, learned the hard way and verified on firmware
 
 ## How the art is made
 
-Three lines (N, Q, G) carry pixel art that was hand-tuned on hardware in the
-apps this one grew out of — those exact bytes are embedded and used verbatim.
-Every other line is generated at startup by ~150 lines of stdlib Python:
+Three letterforms (N, Q, G) were hand-tuned on hardware in the apps this one
+grew out of — those exact letter masks are embedded and stamped through the
+same pipeline as every other line. Everything is generated at startup by
+~200 lines of stdlib Python:
 
 1. **Palette** — the official MTA line color expands into a 5-color ramp
    (specular, ramp top/bottom, lifted edge, bullet bottom) using factors
-   fitted to the two hand-tuned palettes; letters are white, except black on
-   the yellow N/Q/R/W per MTA convention.
+   fitted to the two hand-tuned palettes.
 2. **Bullet** — a 15×15 hard-edged disk (the mask lifted from the hand-tuned
-   originals, so every line's bullet has the identical silhouette), 1px
-   rim-following specular arc, vertical ramp, glyph stamped dead center.
+   originals, so every line's bullet has the identical silhouette) — or a
+   rotated-square diamond for the rush-hour expresses (6X/7X/FX, built
+   automatically for any station that serves their local). The letter is
+   stamped in **white** over the firmware's baked drop-shadow ratios (×0.43
+   below, ×0.78 beside, ×0.76 two below — the same treatment the stock
+   assets give the BUSY wordmark), positioned by the per-icon nudges in the
+   `LETTER_OFFSETS` block. Tune those visually with
+   `tools/bullet_editor.py`, which renders every icon through this exact
+   pipeline with an LED-dot preview and bakes your nudges back into the
+   source.
 3. **Departure flash** — a 72×16 shaded field with vignette and rounded
-   corners, the 10px glyph centered, compiled into a 111-frame
-   sweep/hold/fade `.anim`.
+   corners; locals carry the 10px glyph, expresses the diamond-outline mark
+   with the small letter inside, compiled into a 111-frame sweep/hold/fade
+   `.anim`.
 
-`tools/parity_check.py` proves the generator reproduces all six hand-tuned
-N/Q/G assets **byte-for-byte** — the generated art isn't "close", it is the
-same pipeline the originals came from.
+`tools/parity_check.py` proves the pipeline still reproduces the hand-tuned
+N/Q/G art exactly: **byte-for-byte** in legacy mode, and pixel-classified in
+white mode — only the letter ink and its shadow footprint may differ from
+the legacy assets, and the shadow pixels must equal the legacy pixel times
+its exact ratio.
 
 ## Development
 
 ```sh
 python3 tools/build_stations.py --fetch   # re-bake the station directory
-python3 tools/build_glyphs.py --write     # re-bake glyphs + legacy art (needs Pillow + ~/busybar)
-python3 tools/parity_check.py             # byte-parity vs the legacy apps
+python3 tools/build_glyphs.py --write     # re-bake glyphs + legacy letterforms (needs Pillow + ~/busybar)
+python3 tools/bullet_editor.py            # visual letter-alignment editor (localhost:8765)
+python3 tools/parity_check.py             # art parity vs the legacy apps (needs Pillow)
+python3 tools/make_bullets_strip.py       # regenerate the bullets strip image (needs Pillow)
 python3 tools/capture_preview.py          # real preview.gif off the hardware
 ```
 
