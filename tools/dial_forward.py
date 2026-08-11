@@ -7,14 +7,17 @@ relay rejects device tokens (firmware 1.1.1). So when app.py runs somewhere
 else — busybar-manager on a VPS, the cloud target — it normally has no dial
 stream and sits on the next train.
 
-Run this on the computer the Bar is plugged into, and point the remote app
+Run this on a computer that can reach the Bar, and point the remote app
 at it:
 
-    # on the machine with the USB cable (listens on :8760)
-    python3 tools/dial_forward.py
+    # USB-cable machine (listens on :8760), falling back to the Bar's
+    # Wi-Fi address when the cable is out — Wi-Fi DOES serve the WS, the
+    # token just must ride the query string (x-api-token, lowercase);
+    # the USB interface ignores it, so always include it in BUSYBAR_WS
+    python3 tools/dial_forward.py --target 10.0.4.20:80,<bar-wifi-ip>:80
 
     # wherever app.py runs
-    BUSYBAR_WS=ws://<this machine's tailnet IP>:8760/api/status/ws
+    BUSYBAR_WS=ws://<this machine's tailnet IP>:8760/api/status/ws?x-api-token=<token>
 
 It is a dumb TCP forwarder, so the whole USB API rides along, not just the
 WebSocket — anyone who can reach the listen port can drive the Bar exactly
@@ -53,18 +56,31 @@ def _pump(src, dst):
                 pass
 
 
-def _handle(client, addr, target):
+def _connect_upstream(targets):
+    """First target that accepts wins — USB when the cable is in, Wi-Fi
+    when it's out."""
+    err = None
+    for host, port in targets:
+        try:
+            return socket.create_connection((host, port), timeout=1.5), host
+        except OSError as e:
+            err = e
+    raise err
+
+
+def _handle(client, addr, targets):
     try:
-        upstream = socket.create_connection(target, timeout=5)
+        upstream, chosen = _connect_upstream(targets)
     except OSError as e:
-        _log(f"{addr[0]}: Bar unreachable at {target[0]}:{target[1]} ({e})")
+        _log(f"{addr[0]}: Bar unreachable on any of "
+             f"{','.join(h for h, _ in targets)} ({e})")
         client.close()
         return
     for s in (client, upstream):
         s.settimeout(None)
         # dial deltas are a few bytes each — don't let Nagle sit on them
         s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    _log(f"{addr[0]} connected")
+    _log(f"{addr[0]} connected -> {chosen}")
     back = threading.Thread(target=_pump, args=(upstream, client), daemon=True)
     back.start()
     _pump(client, upstream)
@@ -80,16 +96,20 @@ def main():
     ap.add_argument("--listen", default="0.0.0.0:8760",
                     help="host:port to listen on (default 0.0.0.0:8760)")
     ap.add_argument("--target", default="10.0.4.20:80",
-                    help="the Bar's USB address (default 10.0.4.20:80)")
+                    help="comma-separated Bar addresses, tried in order per "
+                         "connection (default 10.0.4.20:80 — add the Wi-Fi "
+                         "ip:80 as a fallback for when the cable is out)")
     args = ap.parse_args()
     lhost, lport = args.listen.rsplit(":", 1)
-    thost, tport = args.target.rsplit(":", 1)
-    target = (thost, int(tport))
+    targets = []
+    for t in args.target.split(","):
+        thost, tport = t.strip().rsplit(":", 1)
+        targets.append((thost, int(tport)))
     srv = socket.create_server((lhost, int(lport)))
-    _log(f"forwarding {args.listen} -> {args.target} (the Bar's USB side)")
+    _log(f"forwarding {args.listen} -> {args.target}")
     while True:
         client, addr = srv.accept()
-        threading.Thread(target=_handle, args=(client, addr, target),
+        threading.Thread(target=_handle, args=(client, addr, targets),
                          daemon=True).start()
 
 
