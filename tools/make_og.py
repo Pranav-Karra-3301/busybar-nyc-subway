@@ -57,12 +57,7 @@ def main() -> None:
     dw = 880
     dh = round(device.size[1] * dw / device.size[0])
     device = device.resize((dw, dh), Image.LANCZOS)
-    im.paste(device, ((W - dw) // 2, 288), device)
-
-    f_url = font(24)
-    url = "busybar.pranavkarra.me"
-    uw = d.textlength(url, font=f_url)
-    d.text(((W - uw) / 2, H - 54), url, font=f_url, fill=FAINT)
+    im.paste(device, ((W - dw) // 2, 296), device)
 
     q = im.convert("P", palette=Image.ADAPTIVE, colors=256)
     q.save(OUT, optimize=True)
