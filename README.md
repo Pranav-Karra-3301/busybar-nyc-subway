@@ -87,6 +87,7 @@ Everything is env vars; every var has a CLI flag that overrides it
 | `BUSYBAR_PRIORITY` | — | Draw priority, default `1`: the board is visible when the Bar's switch is on OFF and politely refused (409) anywhere else. Set `30`+ to show over the clock. |
 | `BUSYBAR_TARGET` | — | `auto` \| `usb` \| `wifi` \| `cloud` |
 | `BUSYBAR_APP_NAME` | — | `application_name` override (default `nyc-subway`) — set it if you run two copies at once. |
+| `BUSYBAR_WS` | — | Dial stream override: a `ws://` URI for the Bar's status socket. See [Dial from anywhere](#dial-from-anywhere). |
 
 Discovering config values:
 
@@ -106,6 +107,8 @@ With no configuration at all, it shows uptown departures at Times Sq-42 St.
   line color**, and the white pixel in the left column marks the departure
   on screen (up to 8 — one row per 2px of display). Over USB, the Bar's
   **dial** scrolls through arrivals; 25 s idle snaps back to the soonest.
+  Running the app somewhere without the USB cable? See
+  [Dial from anywhere](#dial-from-anywhere).
 - The minutes digit flips exactly on minute boundaries.
 - **Departure flash**: when the shown train's trip disappears from the feed,
   a compiled `.anim` sweeps the line's color across the display with the
@@ -117,6 +120,29 @@ With no configuration at all, it shows uptown departures at Times Sq-42 St.
   OFF position and 409s silently everywhere else; it keeps re-offering its
   canvas every 3 s so flipping the switch brings the board back within
   seconds.
+
+## Dial from anywhere
+
+The Bar serves its status WebSocket (dial + button events) **only on the USB
+interface** — the Wi-Fi interface refuses the handshake and the cloud relay
+rejects device tokens (firmware 1.1.1). So an app running off-cable
+(busybar-manager on a server, the cloud target) is normally static.
+
+The escape hatch: on the computer the Bar is plugged into, run
+
+```sh
+python3 tools/dial_forward.py        # forwards :8760 → 10.0.4.20:80
+```
+
+and give the remote app `BUSYBAR_WS=ws://<that machine>:8760/api/status/ws`
+(with busybar-manager, put it in the variation's env). Dial events ride the
+forwarded socket while draws keep flowing through whatever transport the app
+connected with; arrival changes jump-cut instead of easing, because per-frame
+animation over a relay stretches into mush. If the forwarding machine sleeps,
+the app just falls back to static and reconnects within ~5 s of it returning.
+
+The forwarder is a dumb TCP proxy, so the whole (auth-free) USB API rides
+along — keep the port on a tailnet/VPN, never the open internet.
 
 ## The device, and how this app draws on it
 
