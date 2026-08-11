@@ -432,13 +432,37 @@ BULLET_GLYPH_OVERRIDES = {
 # flash=xl for locals and bold inside the express diamond mark.
 LETTER_OFFSETS = {
     "bullet": {
-        "G": (1, 1),
-        "Q": (0, 1),
+        "7X": (1, 1),
+        "L": (1, 0),
     },
     "flash": {},
 }
 LETTER_SIZES = {
-    "bullet": {},
+    "bullet": {
+        "1": "xl",
+        "2": "xl",
+        "3": "xl",
+        "4": "xl",
+        "5": "xl",
+        "6": "xl",
+        "7": "xl",
+        "A": "xl",
+        "B": "xl",
+        "C": "xl",
+        "D": "xl",
+        "E": "xl",
+        "F": "xl",
+        "G": "xl",
+        "J": "xl",
+        "L": "xl",
+        "N": "xl",
+        "Q": "xl",
+        "R": "xl",
+        "S": "xl",
+        "SIR": "xl",
+        "W": "xl",
+        "Z": "xl",
+    },
     "flash": {},
 }
 # --- END GENERATED: OFFSETS ---
