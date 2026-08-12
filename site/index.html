@@ -141,8 +141,14 @@
   .card code { font-size: 13px; }
 
   .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 22px; margin-top: 48px; }
-  .shots img { width: 100%; display: block; filter: drop-shadow(0 12px 26px rgba(0,0,0,.4)); }
+  .shots img { width: 100%; height: auto; display: block; filter: drop-shadow(0 12px 26px rgba(0,0,0,.4)); }
   .shots figcaption { color: var(--faint); font-size: 13.5px; padding-top: 12px; text-align: center; }
+
+  .status-list { display: grid; gap: 44px; max-width: 720px; margin: 8px auto 0; }
+  .status-list figure { margin: 0; }
+  .status-list img { width: 100%; height: auto; display: block; filter: drop-shadow(0 16px 36px rgba(0,0,0,.45)); }
+  .status-list figcaption { color: var(--faint); font-size: 14.5px; padding-top: 14px; text-align: center; }
+  .status-list figcaption strong { color: var(--ink); font-weight: 600; }
 
   pre {
     background: var(--bg-2);
@@ -260,11 +266,27 @@
     <p class="lede">Suspensions, planned work, delays, held trains. Read live
     from the MTA's alert and vehicle feeds, drawn in the Bar's own screen
     language.</p>
-    <div class="shots">
-      <figure><img src="img/status_alert.gif" width="768" height="248" alt="Amber dot on the departure card, then a red ALERT page with a scrolling MTA headline"><figcaption>Delays scroll the real headline</figcaption></figure>
-      <figure><img src="img/status_noservice.gif" width="768" height="248" alt="Deep red page with a route bullet and stacked NO TRAINS"><figcaption>Suspended service</figcaption></figure>
-      <figure><img src="img/status_planned.gif" width="768" height="248" alt="Yellow page with hazard stripe edges and stacked PLANNED WORK"><figcaption>Planned work</figcaption></figure>
-      <figure><img src="img/status_delayed.gif" width="768" height="248" alt="Red page reading DELAYED with how long a train has been held"><figcaption>Delayed, and for how long</figcaption></figure>
+    <div class="status-list">
+      <figure>
+        <img src="img/status_alert.gif" loading="lazy" alt="The departure card with an amber corner dot, then an amber flash sweeps in a red ALERT page where the real MTA headline scrolls">
+        <figcaption><strong>Delays.</strong> An amber dot on the card, then the real headline sweeps in.</figcaption>
+      </figure>
+      <figure>
+        <img src="img/status_delayed.gif" loading="lazy" alt="Red page reading DELAYED, with how long the train has been held scrolling beneath">
+        <figcaption><strong>Held train.</strong> How long, and where it is stuck.</figcaption>
+      </figure>
+      <figure>
+        <img src="img/status_noservice.gif" loading="lazy" alt="Deep red page with the route bullet, NO TRAINS, and the suspension notice scrolling beneath">
+        <figcaption><strong>Suspended.</strong> The route and the reason take the screen.</figcaption>
+      </figure>
+      <figure>
+        <img src="img/status_planned.gif" loading="lazy" alt="Yellow page with hazard stripe edges, PLANNED, and the work notice scrolling beneath">
+        <figcaption><strong>Planned work.</strong> Hazard stripes and the notice.</figcaption>
+      </figure>
+      <figure>
+        <img src="img/status_track.gif" loading="lazy" alt="Blue page reading REROUTED with the track change detail scrolling beneath">
+        <figcaption><strong>Track change.</strong> Said plainly, in blue.</figcaption>
+      </figure>
     </div>
   </div>
 </section>

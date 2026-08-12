@@ -239,18 +239,23 @@ its exact ratio.
 The app also reads the MTA's realtime alert and vehicle data: the Mercury
 subway-alerts feed, VehiclePositions for held-train detection, and the NYCT
 scheduled/actual track extension in trip updates (still no API key).
-Service problems take over the full display, drawn in the firmware's own
-screen grammar. Suspensions get a deep red plate with the route bullet and
-stacked NO TRAINS; planned work a yellow plate with hazard stripe edges and
-stacked PLANNED WORK; a physically held train a red DELAYED page with how
-long it has been stuck; a track change a blue EXPRESS TRACK page. Ordinary
-delays put a small amber dot in the corner of the departure card, and every
-so often an amber flash sweeps in a red ALERT page where the real MTA
-headline scrolls, then the card returns.
+Service problems render as full-screen status pages authored the way the
+firmware's own busy-mode screens are: the word baked into a shaded plate,
+the route bullet in the icon slot, the live detail scrolling beneath.
+Suspensions show NO TRAINS with the real notice; planned work a yellow
+hazard plate; a physically held train DELAYED with how long and where; a
+track change REROUTED in blue. Ordinary delays put a small amber dot on
+the departure card, and every so often an amber flash sweeps in an ALERT
+page where the actual MTA headline scrolls, then the card returns.
 
 <p align="center">
-  <img src="docs/img/status_alert.gif" width="390" alt="Delay alert, scrolling MTA headline">
-  <img src="docs/img/status_noservice.gif" width="390" alt="Suspension, NO TRAINS">
+  <img src="docs/img/status_alert.gif" width="720" alt="The departure card with an amber dot, then an amber flash sweeps in a red ALERT page with the scrolling MTA headline">
+</p>
+<p align="center">
+  <img src="docs/img/status_noservice.gif" width="720" alt="Suspension page: route bullet, NO TRAINS, the real notice scrolling beneath">
+</p>
+<p align="center">
+  <img src="docs/img/status_delayed.gif" width="720" alt="DELAYED page with how long the train has been held scrolling beneath">
 </p>
 
 ## Development

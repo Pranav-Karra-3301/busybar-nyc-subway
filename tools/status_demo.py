@@ -194,42 +194,19 @@ def dots(colors):
     return els
 
 
-def state_delayed(bullets, route, stop_name, held_min):
-    return [
-        {"id": "bullet", "type": "image", "path": bullets[route],
-         "x": 1, "y": 0, "timeout": 30},
-        {"id": "big", "type": "text", "text": "DELAYED", "font": "bold",
-         "color": AMBER, "x": 19, "y": 2, "align": "top_left",
-         "timeout": 30},
-        {"id": "sub", "type": "text",
-         "text": f"held {held_min:.0f} min at {stop_name}",
-         "font": "tiny", "color": WHITE, "x": 19, "y": 15,
-         "align": "bottom_left", "width": 50, "scroll_rate": 1200,
-         "timeout": 30},
-    ] + dots([app.line_color(route)] * 3)
+def state_delayed(bullets, route, stop_name, held_min, status_assets=None):
+    """The app's real screen: the baked DELAYED plate + bullet + detail."""
+    sa = status_assets or app.build_status_assets()
+    mq = f"HELD {held_min:.0f} MIN AT {stop_name}".upper()
+    return app.build_plate_screen(sa, "delayed", bullets[route], marquee=mq)
 
 
-def state_not_running(bullets, route, head, period):
-    """DND grammar: deep-red plate asset, bullet in the icon slot, two
-    stacked bold lines with a shadow copy each — all plain draw elements,
-    so the real app can render this exact screen today."""
-    els = [
-        {"id": "plate", "type": "image",
-         "path": bullets.get("_plate_dnd", "mem:plate_dnd"),
-         "x": 0, "y": 0, "timeout": 30},
-        {"id": "bullet", "type": "image", "path": bullets[route],
-         "x": 1, "y": 0, "timeout": 30},
-    ]
-    for i, (text, y0) in enumerate((("NO", 1), ("TRAINS", 8))):
-        w, _h, _lit = sim_text(text, "bold")
-        x0 = 19 + (46 - w) // 2
-        els.append({"id": f"l{i}s", "type": "text", "text": text,
-                    "font": "bold", "color": "#00000091", "x": x0,
-                    "y": y0 + 1, "align": "top_left", "timeout": 30})
-        els.append({"id": f"l{i}", "type": "text", "text": text,
-                    "font": "bold", "color": WHITE, "x": x0, "y": y0,
-                    "align": "top_left", "timeout": 30})
-    return els
+def state_not_running(bullets, route, head, period, status_assets=None):
+    """The app's real screen: the baked NO TRAINS plate + bullet + the
+    notice as the in-plate marquee."""
+    sa = status_assets or app.build_status_assets()
+    mq = plain(f"{head}   {period}" if period else head).upper()
+    return app.build_plate_screen(sa, "susp", bullets[route], marquee=mq)
 
 
 def state_alert_dot(bullets, route, mins, head):
@@ -342,16 +319,15 @@ def push_main(args):
     bar = connect_bar()
     bullets = upload_bullets(
         bar, {g["d_route"], g["s_route"], g["a3_route"], "N"})
-    plate = app.png_encode(72, 16, _plate_rgba("#7E1416"))
-    plate_name = f"sd_plate_{hashlib.sha256(plate).hexdigest()[:8]}.png"
-    r = bar.s.post(bar.t.url("/assets/upload"),
-                   params={"application_name": app.APP_NAME,
-                           "file": plate_name},
-                   headers={**bar.t.headers,
-                            "Content-Type": "application/octet-stream"},
-                   data=plate, timeout=20)
-    r.raise_for_status()
-    bullets["_plate_dnd"] = plate_name
+    sa = app.build_status_assets()
+    for a in sa.values():
+        r = bar.s.post(bar.t.url("/assets/upload"),
+                       params={"application_name": app.APP_NAME,
+                               "file": a["name"]},
+                       headers={**bar.t.headers,
+                                "Content-Type": "application/octet-stream"},
+                       data=a["bytes"], timeout=20)
+        r.raise_for_status()
     cap = args.capture
     if cap:
         cap.mkdir(parents=True, exist_ok=True)
@@ -497,6 +473,35 @@ def _plate(hexc):
     return rows, edge
 
 
+
+def baked_screen_rows(sa, key, bullet_px=None):
+    """A baked status screen (app art, byte-identical to the device asset)
+    as RGB rows, with the bullet composited into the icon slot."""
+    from PIL import Image
+    import io
+    img = Image.open(io.BytesIO(sa[key]["bytes"])).convert("RGBA")
+    px = img.load()
+    f = _blank()
+    for y in range(16):
+        for x in range(72):
+            pp = px[x, y]
+            if pp[3]:
+                f[y][x] = pp[:3]
+    if bullet_px:
+        _blit_bullet(f, bullet_px, 1, 0)
+    return f
+
+
+def marquee_overlay(f, text, t, color=(255, 205, 200)):
+    """The in-plate marquee at device speed, ink rows 10-13."""
+    w, h, lit = sim_text(text, "tiny")
+    off = int(t * 24) % (w + 20)
+    for x, y in lit:
+        sx = 19 + x - off
+        if 19 <= sx < 70 and 0 <= 10 + y < 16:
+            f[10 + y][sx] = color
+
+
 def anim_ripple_ping(card, color):
     """Notification ping: the transition_select grammar (soft ring from the
     top edge + Add wash, fast attack / ~1s decay) repurposed as AN ALERT
@@ -519,127 +524,72 @@ def anim_ripple_ping(card, color):
     return frames
 
 
-def anim_plate_delayed(bullet_px, sub):
-    """DND family: deep-red plate, bullet in the icon slot, DELAYED in
-    bold white over the firmware shadow, detail line as a tiny in-plate
-    marquee. Same calm breathe as the suspension plate."""
-    base, _edge = _plate("#7E1416")
-    tw, th, tlit = sim_text("DELAYED", "bold")
-    tx0 = 19 + (46 - tw) // 2
-    sw, sh, slit = sim_text(sub, "tiny")
-    win = 47
+def anim_plate_delayed(sa, bullet_px, sub):
+    """The app's baked DELAYED screen with the detail marquee and the
+    plate family's calm breathe."""
+    base = baked_screen_rows(sa, "delayed", bullet_px)
     frames = []
     for i in range(int(3.6 * FPS)):
         t = i / FPS
-        k = 0.9 + 0.1 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / 3.6))
+        k = 0.93 + 0.07 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / 3.6))
         f = [[tuple(round(v * k) for v in p) for p in row] for row in base]
-        _blit_bullet(f, bullet_px, 1, 0)
-        for x, y in tlit:
-            fx, fy = tx0 + x, 1 + y
-            if (x, y + 1) not in tlit and 0 <= fx < 72 and 0 <= fy + 1 < 16:
-                p = f[fy + 1][fx]
-                f[fy + 1][fx] = tuple(round(v * 0.4) for v in p)
-            if 0 <= fx < 72 and 0 <= fy < 16:
-                f[fy][fx] = (255, 255, 255)
-        off = int(t * 24) % (sw + 20)
-        for x, y in slit:
-            sx = 19 + x - off
-            if 19 <= sx < 19 + win and 0 <= 10 + y < 16:
-                f[10 + y][sx] = (255, 205, 200)
+        marquee_overlay(f, sub.upper(), t)
         frames.append(f)
     return frames
 
 
-def anim_plate_norun(bullet_px, line1, line2):
-    """DO NOT DISTURB grammar: deep-red plate, icon left, TWO stacked bold
-    lines with baked shadows, static except a slow calm breathe."""
-    base, _ = _plate("#7E1416")
+def anim_plate_norun(sa, bullet_px, mq):
+    """The app's baked NO TRAINS screen: notice marquee + calm breathe."""
+    base = baked_screen_rows(sa, "susp", bullet_px)
     frames = []
     for i in range(int(3.6 * FPS)):
         t = i / FPS
-        k = 0.9 + 0.1 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / 3.6))
+        k = 0.93 + 0.07 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / 3.6))
         f = [[tuple(round(v * k) for v in p) for p in row] for row in base]
-        _blit_bullet(f, bullet_px, 1, 0)
-        for text, y0 in ((line1, 1), (line2, 8)):
-            w, h, lit = sim_text(text, "bold")
-            x0 = 19 + (46 - w) // 2
-            for x, y in lit:
-                fx, fy = x0 + x, y0 + y
-                if (x, y + 1) not in lit and 0 <= fx < 72 and \
-                        0 <= fy + 1 < 16:
-                    p = f[fy + 1][fx]
-                    f[fy + 1][fx] = tuple(round(v * 0.4) for v in p)
-                if 0 <= fx < 72 and 0 <= fy < 16:
-                    f[fy][fx] = (255, 255, 255)
+        marquee_overlay(f, mq.upper(), t)
         frames.append(f)
     return frames
 
 
-def anim_keepout(bullet_px, line1, line2):
-    """KEEP OUT grammar: yellow plate, hazard stripes crawling along the
-    top and bottom bands (barber-pole), bold BLACK text stacked in two
-    lines — their planned-work/warning look verbatim."""
-    base, _ = _plate("#FCC30B")
+def anim_keepout(sa, bullet_px, mq):
+    """The app's baked PLANNED screen with the hazard dashes crawling
+    (keep_out grammar) and the work notice as the marquee."""
+    base = baked_screen_rows(sa, "planned", bullet_px)
+    yellow_top = base[0][36]
     dark = (24, 20, 2)
     frames = []
     for i in range(int(3.0 * FPS)):
+        t = i / FPS
         off = i // 2
         f = [row[:] for row in base]
         for band in (0, 15):
-            for x in range(72):
-                if f[band][x] == (0, 0, 0):
+            for x in range(1, 71):
+                if base[band][x] == (0, 0, 0):
                     continue
-                if ((x + off + band) // 4) % 2:
-                    f[band][x] = dark
-        _blit_bullet(f, bullet_px, 1, 0)
-        for text, y0 in ((line1, 1), (line2, 8)):
-            w, h, lit = sim_text(text, "bold")
-            x0 = 19 + (46 - w) // 2
-            for x, y in lit:
-                fx, fy = x0 + x, y0 + y
-                if (x, y + 1) not in lit and 0 <= fx < 72 and \
-                        1 <= fy + 1 < 15:
-                    p = f[fy + 1][fx]
-                    f[fy + 1][fx] = tuple(round(v * 0.4) for v in p)
-                if 0 <= fx < 72 and 1 <= fy < 15:
-                    f[fy][fx] = (255, 255, 255)
+                f[band][x] = dark if ((x + off + band) // 4) % 2 \
+                    else yellow_top
+        marquee_overlay(f, mq.upper(), t, color=(32, 26, 2))
         frames.append(f)
     return frames
 
 
-def anim_alert_cycle(card, bullet_px, headline):
-    """The real proposal for live alerts: the normal card keeps its amber
-    corner dot; every so often a ping announces, the wash peak covers a cut
-    to a full-screen alert plate (bullet + ALERT + in-plate marquee), one
-    marquee pass, wash back to the card. The swap-under-the-flash trick is
-    exactly how transition_select changes screens."""
-    plate, _ = _plate("#8A1113")
-    aw, ah, alit = sim_text("ALERT", "bold")
+def anim_alert_cycle(card, sa, bullet_px, headline):
+    """The shipped behavior: the card keeps its amber dot; a ping
+    announces, the wash peak covers the cut to the app's baked ALERT
+    screen, the headline makes one marquee pass, the wash brings the card
+    back — transition_select grammar, exactly what the device plays."""
+    plate = baked_screen_rows(sa, "alertpg", bullet_px)
     hw, hh, hlit = sim_text(headline, "tiny")
-    win = 47
-    plate_secs = (hw + win + 20) / 24  # ~= the device's 1400px/min marquee
+    plate_secs = (hw + 51 + 20) / 24  # ~= the device's 1400px/min marquee
     frames = []
     total = 2.0 + 0.9 + plate_secs + 0.9
     for i in range(int(total * FPS)):
         t = i / FPS
         if t < 2.0 or t >= 2.0 + 0.9 + plate_secs:
             f = [row[:] for row in card]
-            tt = t - 2.0 if t < 2.0 else t - (2.0 + plate_secs)
         else:
             f = [row[:] for row in plate]
-            _blit_bullet(f, bullet_px, 1, 0)
-            for x, y in alit:
-                fx, fy = 19 + x, 2 + y
-                if (x, y + 1) not in alit and fy + 1 < 16:
-                    p = f[fy + 1][fx]
-                    f[fy + 1][fx] = tuple(round(v * 0.4) for v in p)
-                f[fy][fx] = (255, 255, 255)
-            off = int((t - 2.9) * 24) % (hw + win + 20) - win
-            for x, y in hlit:
-                sx = 19 + x - off - 0
-                if 19 <= sx < 19 + win and 0 <= 10 + y < 16:
-                    f[10 + y][sx] = (255, 205, 200)
-        # the ping + swap washes
+            marquee_overlay(f, headline.upper(), t - 2.9)
         for start in (2.0, 2.0 + 0.9 + plate_secs):
             tt = t - start
             if 0 <= tt < 0.7:
@@ -672,32 +622,15 @@ def anim_contrast(bullet_px, text, color):
     return frames
 
 
-def anim_trackchange(bullet_px):
-    """Track change, said plainly: the blue contrast sweep carrying two
-    stacked bold lines — EXPRESS / TRACK — DND stacking on the field
-    people liked, instead of a cryptic corner badge."""
+def anim_trackchange(sa, bullet_px, mq):
+    """The app's baked REROUTED screen with the track detail marquee."""
+    base = baked_screen_rows(sa, "track", bullet_px)
     frames = []
-    for i in range(int(3.0 * FPS)):
+    for i in range(int(3.6 * FPS)):
         t = i / FPS
-        f = _blank()
-        phase = t / 3.0 * 72
-        for y in range(16):
-            for x in range(72):
-                v = 0.28 + 0.24 * math.sin((x + y * 2 - phase * 2)
-                                           * math.pi / 36)
-                f[y][x] = tuple(min(255, round(c * v)) for c in BLUE_RGB)
-        _blit_bullet(f, bullet_px, 1, 0)
-        for text, y0 in (("EXPRESS", 1), ("TRACK", 8)):
-            w, h, lit = sim_text(text, "bold")
-            x0 = 19 + (46 - w) // 2
-            for x, y in lit:
-                fx, fy = x0 + x, y0 + y
-                if (x, y + 1) not in lit and 0 <= fx < 72 and \
-                        0 <= fy + 1 < 16:
-                    p = f[fy + 1][fx]
-                    f[fy + 1][fx] = tuple(round(v * 0.35) for v in p)
-                if 0 <= fx < 72 and 0 <= fy < 16:
-                    f[fy][fx] = (255, 255, 255)
+        k = 0.93 + 0.07 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / 3.6))
+        f = [[tuple(round(v * k) for v in p) for p in row] for row in base]
+        marquee_overlay(f, mq.upper(), t, color=(202, 220, 255))
         frames.append(f)
     return frames
 
@@ -721,7 +654,7 @@ def flatten_state(elements, bullets_px):
     return base
 
 
-def build_treatments(g, bullets, bullets_px):
+def build_treatments(g, bullets, bullets_px, sa):
     alert_card = flatten_state(
         state_alert_dot(bullets, g["a3_route"], 7, g["a3"]["head"]),
         bullets_px)
@@ -733,7 +666,7 @@ def build_treatments(g, bullets, bullets_px):
     out = []
     for name, title, frames, caption, tags in (
         ("cycle", "Card ⇄ alert page — the real proposal",
-         anim_alert_cycle(alert_card, a3_bullet, head[:52]),
+         anim_alert_cycle(alert_card, sa, a3_bullet, head[:52]),
          "The next-train card keeps a quiet amber dot; a ping announces, "
          "the wash peak covers the cut to a full-screen alert plate "
          "(bullet + ALERT + in-plate marquee, busy-mode box geometry), one "
@@ -749,28 +682,30 @@ def build_treatments(g, bullets, bullets_px):
          "readable throughout.",
          ["transition_select grammar", "Add blend"]),
         ("delayed", "DELAYED, in the plate family",
-         anim_plate_delayed(d_bullet, f"held {g['d_min']:.0f} min at "
+         anim_plate_delayed(sa, d_bullet, f"held {g['d_min']:.0f} min at "
                             f"{g['d_name']}"),
          "Deep-red plate, bold DELAYED over the firmware shadow, the "
          "held-time detail scrolling inside the plate. Same family as the "
          "suspension screen.",
          [g["d_src"], "dnd_72x16 grammar"]),
         ("dnd", "DO NOT DISTURB grammar — suspension",
-         anim_plate_norun(g_bullet, "NO", "TRAINS"),
+         anim_plate_norun(sa, g_bullet, plain(g["s"]["head"])),
          f"Two stacked bold lines with baked shadows on the deep-red "
          f"plate, icon left — their DND screen with the {g['s_route']} "
          "bullet in the icon slot. Slow calm breathe, nothing else moves.",
          [g["s_live"], "dnd_72x16 grammar"]),
         ("keepout", "KEEP OUT grammar — planned work",
-         anim_keepout(g_bullet, "PLANNED", "WORK"),
+         anim_keepout(sa, g_bullet, "trains skip stations for planned "
+                      "track work"),
          "Yellow plate, white bold text over the firmware shadow (matching "
          "the app's white-letter identity), hazard stripes crawling along "
          "the top and bottom edges — their KEEP OUT screen recut for "
          "weekend work alerts.",
          ["keep_out_72x16 grammar", "for Planned - Part Suspended"]),
         ("trackchange", "Track change — said plainly",
-         anim_trackchange(bullets_px.get(f"mem:{g['d_route']}")
-                          or red_bullet),
+         anim_trackchange(sa, bullets_px.get(f"mem:{g['d_route']}")
+                          or red_bullet,
+                          "this train runs on track D3 instead of D4"),
          "EXPRESS / TRACK stacked DND-style on the blue contrast sweep — "
          "replaces the cryptic corner badge. Fires when "
          "NyctStopTimeUpdate's actual_track diverges from scheduled_track "
@@ -894,7 +829,9 @@ def sim_render(elements, bullets_px):
             elif align == "center":
                 x0, y0 = ax - w // 2, ay - h // 2
             else:
-                x0, y0 = ax, ay
+                # device fonts carry 2 rows of top leading (measured off
+                # hardware frame dumps)
+                x0, y0 = ax, ay + 2
             if win and w > win:
                 strip = [[(0, 0, 0, 0)] * w for _ in range(h)]
                 for x, y in lit:
@@ -919,7 +856,14 @@ def build_payload(captures_dir):
         px = img.load()
         bullets_px[f"mem:{d}"] = [[px[x, y] for x in range(15)]
                                   for y in range(15)]
-    bullets_px["mem:plate_dnd"] = _plate_rgba("#7E1416")
+    sa = app.build_status_assets()
+    for key, a in sa.items():
+        if key == "wash":
+            continue
+        img = Image.open(io.BytesIO(a["bytes"])).convert("RGBA")
+        px = img.load()
+        bullets_px[a["name"]] = [[px[x, y] for x in range(72)]
+                                 for y in range(16)]
 
     states = [
         ("normal", "Today's card (for contrast)", state_normal(
@@ -927,14 +871,16 @@ def build_payload(captures_dir):
          "The shipped next-train card: bullet, minutes, position dots.",
          ["baseline"]),
         ("delayed", "DELAYED — train physically held", state_delayed(
-            bullets, g["d_route"], g["d_name"], g["d_min"]),
+            bullets, g["d_route"], g["d_name"], g["d_min"],
+            status_assets=sa),
          f"{g['d_route']} train stopped at {g['d_name']} for "
          f"{g['d_min']:.0f} minutes and not moving — VehiclePositions "
          "STOPPED_AT + stale timestamp, the same signal the platform "
          "clocks turn into “Delayed”.",
          [g["d_src"], "GTFS-RT VehiclePositions"]),
         ("not_running", "NOT RUNNING — (part-)suspension", state_not_running(
-            bullets, g["s_route"], plain(g["s"]["head"]), g["s"]["period"]),
+            bullets, g["s_route"], plain(g["s"]["head"]), g["s"]["period"],
+            status_assets=sa),
          f"{g['s']['type']}: “{plain(g['s']['head'])}” "
          f"({g['s']['period'] or 'no period given'}). The DND-grammar "
          "plate rendered from plain draw elements (plate image + bullet + "
@@ -970,7 +916,7 @@ def build_payload(captures_dir):
                      for t in tickers],
             capture=cap_url))
     return dict(generated=time.strftime("%H:%M:%S"), states=out,
-                treatments=build_treatments(g, bullets, bullets_px))
+                treatments=build_treatments(g, bullets, bullets_px, sa))
 
 
 SIM_PAGE = r"""<!doctype html>
