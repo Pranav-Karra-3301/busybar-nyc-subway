@@ -1761,7 +1761,8 @@ class App:
                     self.status_assets, "delayed", bullet,
                     marquee=f"HELD {int(secs // 60)} MIN AT {name}".upper()
                 ), "plate_delay"
-        dot = bool(self.status_assets and self._alert("delays"))
+        dot = bool(self.status_assets
+                   and self._alert("delays", "suspension", "planned"))
         els = build_screen(self.cfg, self.assets, self.arrivals, self.index,
                            offset, alert_dot=dot)
         return els, ("card" if self.arrivals else "msg") + \
@@ -1910,6 +1911,10 @@ class App:
         a = self._alert("delays")
         if a:
             return ("alertpg", a["head"].upper(), "#FFD2CCFF")
+        a = self._alert("suspension")
+        if a:  # partial suspension while trains still run here
+            mq = a["head"] + ("   " + a["period"] if a["period"] else "")
+            return ("susp", mq.upper(), "#FFD2CCFF")
         shown = self.displayed()
         if shown and shown[2] in self.track:
             sched, act = self.track[shown[2]]
