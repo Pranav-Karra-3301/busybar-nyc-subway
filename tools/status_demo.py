@@ -236,9 +236,6 @@ def state_alert_dot(bullets, route, mins, head):
         {"id": "unit", "type": "text", "text": "min", "font": "bold",
          "color": WHITE, "align": "bottom_left", "x": 37, "y": 15,
          "timeout": 30},
-        {"id": "sub", "type": "text", "text": plain(head), "font": "tiny",
-         "color": AMBER, "x": 38, "y": 2, "align": "top_left",
-         "width": 30, "scroll_rate": 1200, "timeout": 30},
     ] + dots([app.line_color(route)] * 3)
 
 
@@ -429,10 +426,63 @@ def _blit_bullet(frame, px, x0, y0):
 
 FPS = 30  # preview rate; the device pipeline runs these same frames at 60
 
+AMBER_RGB = (255, 176, 0)
+RED_RGB = (238, 53, 46)
+BLUE_RGB = (0, 90, 200)
 
-def anim_ripple(card, color):
-    """The button-press ripple: soft ring expands from the physical button
-    (top center), then an Add wash decays over ~1s. Two pulses, settle."""
+
+def _ramp(hexc):
+    """The app's derived 5-color ramp for an arbitrary plate color."""
+    base = app._hex_rgb(hexc)
+    return {
+        "spec": tuple(round(v + (255 - v) * 0.60) for v in base),
+        "top": app._scale(base, 1.15),
+        "bot": app._scale(base, 0.47),
+        "lift": app._scale(base, 0.62),
+    }
+
+
+def _plate(hexc):
+    """The busy-mode box: full-width rounded plate, 1px specular top,
+    vertical ramp, lifted bottom edge, 3px corner vignette — the exact
+    field geometry of meeting/dnd/keep_out/booked and our flash card.
+    Returns (rows, edge_pixel_set) — the edge set is what ON AIR pulses."""
+    pal = _ramp(hexc)
+    w, h, r = 72, 16, 5
+    rows, edge = [], set()
+    inside = {}
+    for y in range(h):
+        for x in range(w):
+            cx, cy = min(x, w - 1 - x), min(y, h - 1 - y)
+            inside[(x, y)] = not (cx < r and cy < r and
+                                  (r - cx) ** 2 + (r - cy) ** 2 > r * r)
+    for y in range(h):
+        if y == 0:
+            base = pal["spec"]
+        elif y == h - 1:
+            base = pal["lift"]
+        else:
+            base = app._lerp(pal["top"], pal["bot"], (y - 1) / (h - 2))
+        row = []
+        for x in range(w):
+            if not inside[(x, y)]:
+                row.append((0, 0, 0))
+                continue
+            cx, cy = min(x, w - 1 - x), min(y, h - 1 - y)
+            e = min(cx, cy)
+            scale = (0.25, 0.5, 0.75)[e] if e < 3 else 1.0
+            row.append(tuple(round(c * scale) for c in base))
+            if any(not inside.get((x + dx, y + dy), False)
+                   for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                edge.add((x, y))
+        rows.append(row)
+    return rows, edge
+
+
+def anim_ripple_ping(card, color):
+    """Notification ping: the transition_select grammar (soft ring from the
+    top edge + Add wash, fast attack / ~1s decay) repurposed as AN ALERT
+    ARRIVING — nothing to click, it just announces. Two pings, settle."""
     frames = []
     for i in range(int(3.2 * FPS)):
         t = i / FPS
@@ -451,66 +501,136 @@ def anim_ripple(card, color):
     return frames
 
 
-def anim_flash(card, color):
-    """transition_select_red language: instant wash, ~1s exponential decay,
-    three times, then the card holds clean."""
+def anim_plate_delayed(bullet_px, sub):
+    """ON AIR grammar: near-black plate, the word in red with pulsing red
+    brackets (the glow lives in the frame, the text never moves), route
+    bullet as the icon, detail line as a tiny in-plate marquee."""
+    base, _edge = _plate("#232326")
+    tw, th, tlit = sim_text("DELAYED", "bold")
+    tx0 = 19 + (46 - tw) // 2
+    sw, sh, slit = sim_text(sub, "tiny")
+    win = 47
+    frames = []
+    for i in range(int(4.0 * FPS)):
+        t = i / FPS
+        f = [row[:] for row in base]
+        _blit_bullet(f, bullet_px, 1, 0)
+        pulse = 0.55 + 0.45 * math.sin(t * 2 * math.pi / 1.6)
+        red = tuple(round(c * (0.72 + 0.28 * pulse)) for c in RED_RGB)
+        for x, y in tlit:
+            fx, fy = tx0 + x, 2 + y
+            if 0 <= fx < 72 and 0 <= fy < 16:
+                f[fy][fx] = red
+        glow = tuple(round(c * pulse) for c in RED_RGB)
+        for bx, inward in ((tx0 - 5, 1), (tx0 + tw + 3, -1)):
+            for yy in range(2, 9):
+                xx = bx + (inward if yy in (2, 8) else 0)
+                if 0 <= xx < 72:
+                    f[yy][xx] = glow
+        off = int(t * 24) % (sw + 20)
+        for x, y in slit:
+            sx = 19 + x - off
+            if 19 <= sx < 19 + win and 0 <= 10 + y < 16:
+                f[10 + y][sx] = (200, 200, 205)
+        frames.append(f)
+    return frames
+
+
+def anim_plate_norun(bullet_px, line1, line2):
+    """DO NOT DISTURB grammar: deep-red plate, icon left, TWO stacked bold
+    lines with baked shadows, static except a slow calm breathe."""
+    base, _ = _plate("#7E1416")
     frames = []
     for i in range(int(3.6 * FPS)):
         t = i / FPS
-        f = [row[:] for row in card]
-        for start in (0.0, 0.9, 1.8):
-            tt = t - start
-            if 0 <= tt < 1.1:
-                f = _add(f, _wash(0.8 * math.exp(-tt / 0.3)), color)
+        k = 0.9 + 0.1 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / 3.6))
+        f = [[tuple(round(v * k) for v in p) for p in row] for row in base]
+        _blit_bullet(f, bullet_px, 1, 0)
+        for text, y0 in ((line1, 1), (line2, 8)):
+            w, h, lit = sim_text(text, "bold")
+            x0 = 19 + (46 - w) // 2
+            for x, y in lit:
+                fx, fy = x0 + x, y0 + y
+                if (x, y + 1) not in lit and 0 <= fx < 72 and \
+                        0 <= fy + 1 < 16:
+                    p = f[fy + 1][fx]
+                    f[fy + 1][fx] = tuple(round(v * 0.4) for v in p)
+                if 0 <= fx < 72 and 0 <= fy < 16:
+                    f[fy][fx] = (255, 255, 255)
         frames.append(f)
     return frames
 
 
-def anim_marquee(text, color):
-    """Full-screen marquee: the headline in the flash-card letter size
-    riding a dim breathing field — one pass, wraps."""
-    w, h, lit = sim_text(text, "extra_large")
-    span = w + 72 + 20
-    frames = []
-    for i in range(0, span, 2):
-        f = _blank()
-        breathe = 0.16 + 0.06 * math.sin(i / FPS * 2.2)
-        for y in range(16):
-            ramp = 1 - y / 22
-            c = tuple(round(col * breathe * ramp) for col in color)
-            for x in range(72):
-                f[y][x] = c
-        x0 = 72 - i
-        for x, y in lit:
-            tx = x0 + x
-            ty = 3 + y
-            if 0 <= tx < 72 and 0 <= ty + 1 < 16 and (x, y + 1) not in lit:
-                p = f[ty + 1][tx]
-                f[ty + 1][tx] = tuple(round(v * 0.3) for v in p)
-            if 0 <= tx < 72 and 0 <= ty < 16:
-                f[ty][tx] = (255, 255, 255)
-        frames.append(f)
-    return frames
-
-
-def anim_gradient_pulse(text, color, bullet_px=None):
-    """Just a gradient: vertical field in the alert color breathing slowly
-    (indicator-loop language), message on top."""
+def anim_keepout(bullet_px, line1, line2):
+    """KEEP OUT grammar: yellow plate, hazard stripes crawling along the
+    top and bottom bands (barber-pole), bold BLACK text stacked in two
+    lines — their planned-work/warning look verbatim."""
+    base, _ = _plate("#FCC30B")
+    dark = (24, 20, 2)
     frames = []
     for i in range(int(3.0 * FPS)):
-        t = i / FPS
-        level = 0.42 + 0.3 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / 3.0))
-        f = _blank()
-        for y in range(16):
-            ramp = 1.15 - y / 16 * 0.9
-            c = tuple(min(255, round(col * level * ramp)) for col in color)
+        off = i // 2
+        f = [row[:] for row in base]
+        for band in (0, 15):
             for x in range(72):
-                f[y][x] = c
-        x = 1
-        if bullet_px:
+                if f[band][x] == (0, 0, 0):
+                    continue
+                if ((x + off + band) // 4) % 2:
+                    f[band][x] = dark
+        _blit_bullet(f, bullet_px, 1, 0)
+        for text, y0 in ((line1, 1), (line2, 8)):
+            w, h, lit = sim_text(text, "bold")
+            x0 = 19 + (46 - w) // 2
+            for x, y in lit:
+                fx, fy = x0 + x, y0 + y
+                if 0 <= fx < 72 and 1 <= fy < 15:
+                    f[fy][fx] = (10, 8, 0)
+        frames.append(f)
+    return frames
+
+
+def anim_alert_cycle(card, bullet_px, headline):
+    """The real proposal for live alerts: the normal card keeps its amber
+    corner dot; every so often a ping announces, the wash peak covers a cut
+    to a full-screen alert plate (bullet + ALERT + in-plate marquee), one
+    marquee pass, wash back to the card. The swap-under-the-flash trick is
+    exactly how transition_select changes screens."""
+    plate, _ = _plate("#8A1113")
+    aw, ah, alit = sim_text("ALERT", "bold")
+    hw, hh, hlit = sim_text(headline, "tiny")
+    win = 47
+    plate_secs = (hw + win + 20) / 40
+    frames = []
+    total = 2.0 + 0.9 + plate_secs + 0.9
+    for i in range(int(total * FPS)):
+        t = i / FPS
+        if t < 2.0 or t >= 2.0 + 0.9 + plate_secs:
+            f = [row[:] for row in card]
+            tt = t - 2.0 if t < 2.0 else t - (2.0 + plate_secs)
+        else:
+            f = [row[:] for row in plate]
             _blit_bullet(f, bullet_px, 1, 0)
-            x = 19
-        _stamp_text(f, text, "bold", (255, 255, 255), x, 5)
+            for x, y in alit:
+                fx, fy = 19 + x, 2 + y
+                if (x, y + 1) not in alit and fy + 1 < 16:
+                    p = f[fy + 1][fx]
+                    f[fy + 1][fx] = tuple(round(v * 0.4) for v in p)
+                f[fy][fx] = (255, 255, 255)
+            off = int((t - 2.9) * 40) % (hw + win + 20) - win
+            for x, y in hlit:
+                sx = 19 + x - off - 0
+                if 19 <= sx < 19 + win and 0 <= 10 + y < 16:
+                    f[10 + y][sx] = (255, 205, 200)
+        # the ping + swap washes
+        for start in (2.0, 2.0 + 0.9 + plate_secs):
+            tt = t - start
+            if 0 <= tt < 0.7:
+                r = 4 + tt / 0.7 * 78
+                f = _add(f, _ring(36, 0, r, 5), tuple(
+                    round(c * (1 - tt / 0.7)) for c in AMBER_RGB))
+            tt2 = t - (start + 0.35)
+            if 0 <= tt2 < 0.55:
+                f = _add(f, _wash(0.8 * math.exp(-tt2 / 0.22)), AMBER_RGB)
         frames.append(f)
     return frames
 
@@ -534,31 +654,6 @@ def anim_contrast(bullet_px, text, color):
     return frames
 
 
-def anim_particles(card, color):
-    """ending_particles language: sparse twinkling pixels in the alert
-    color over a dimmed card."""
-    rng = random.Random(7)
-    pts = [(rng.randrange(72), rng.randrange(16), rng.random() * 2 * math.pi,
-            0.6 + rng.random() * 1.2) for _ in range(46)]
-    frames = []
-    for i in range(int(3.0 * FPS)):
-        t = i / FPS
-        f = [[tuple(round(v * 0.55) for v in p) for p in row] for row in card]
-        for x, y, ph, speed in pts:
-            tw = 0.5 + 0.5 * math.sin(ph + t * 2 * math.pi * speed)
-            if tw > 0.55:
-                g = (tw - 0.55) / 0.45
-                f[y][x] = tuple(min(255, round(b + c * g))
-                                for b, c in zip(f[y][x], color))
-        frames.append(f)
-    return frames
-
-
-AMBER_RGB = (255, 176, 0)
-RED_RGB = (238, 53, 46)
-BLUE_RGB = (0, 90, 200)
-
-
 def flatten_state(elements, bullets_px):
     """A state's element list -> one static 72x16 frame (tickers frozen at
     their start position) to run treatments over."""
@@ -573,52 +668,57 @@ def flatten_state(elements, bullets_px):
 
 
 def build_treatments(g, bullets, bullets_px):
-    delayed_card = flatten_state(
-        state_delayed(bullets, g["d_route"], g["d_name"], g["d_min"]),
+    alert_card = flatten_state(
+        state_alert_dot(bullets, g["a3_route"], 7, g["a3"]["head"]),
         bullets_px)
-    notrun_card = flatten_state(
-        state_not_running(bullets, g["s_route"], plain(g["s"]["head"]),
-                          g["s"]["period"]), bullets_px)
     head = plain(g["a3"]["head"])
+    a3_bullet = bullets_px.get(f"mem:{g['a3_route']}")
+    d_bullet = bullets_px.get(f"mem:{g['d_route']}")
+    g_bullet = bullets_px.get(f"mem:{g['s_route']}")
     red_bullet = bullets_px.get("mem:1")
     out = []
     for name, title, frames, caption, tags in (
-        ("ripple", "Ripple — the button-press language",
-         anim_ripple(delayed_card, AMBER_RGB),
-         "Soft ring expanding from the physical button + Add-blend wash "
-         "with the firmware's fast-in/slow-out envelope (in 100ms, out "
-         "1000ms in busy_presets.c), twice, over the DELAYED card.",
-         ["transition_select_72x16 language", "Add blend"]),
-        ("flash", "Red flash ×3 — service suspended",
-         anim_flash(notrun_card, RED_RGB),
-         "The transition_select_red move: instant red wash, ~1s exponential "
-         "decay, three beats — then the NOT RUNNING card is already there, "
-         "readable.",
-         ["transition_select_red_72x16 language", "Add blend"]),
-        ("marquee", "Full-screen marquee — the headline itself",
-         anim_marquee(head[:60], RED_RGB),
-         "The alert headline at departure-flash letter size riding a dim "
-         "breathing red field, one full pass. Compiled as a .anim the "
-         "device plays this at 60 fps — smooth even over the cloud relay.",
-         ["headline: live Delays alert", "anim pipeline"]),
-        ("gradient", "Just a red gradient — breathing",
-         anim_gradient_pulse("DELAYS", RED_RGB,
-                             bullets_px.get(f"mem:{g['a3_route']}")),
-         "No shapes at all: a vertical red field breathing on a 3 s cycle "
-         "(the indicator-loop language) under the route bullet and one "
-         "line of text.",
-         ["indicator_busy language", "Mercury alert: type=Delays"]),
+        ("cycle", "Card ⇄ alert page — the real proposal",
+         anim_alert_cycle(alert_card, a3_bullet, head[:80]),
+         "The next-train card keeps a quiet amber dot; a ping announces, "
+         "the wash peak covers the cut to a full-screen alert plate "
+         "(bullet + ALERT + in-plate marquee, busy-mode box geometry), one "
+         "pass, wash back. Screens swapping under the flash is exactly how "
+         "transition_select changes pages.",
+         ["headline: live Delays alert", "busy-mode plate",
+          "transition_select swap"]),
+        ("ping", "Notification ping — announce, don't decorate",
+         anim_ripple_ping(alert_card, AMBER_RGB),
+         "The transition_select ring + wash grammar as an arrival sound: "
+         "soft ring blooms from the top edge, amber wash decays with the "
+         "firmware's fast-in/slow-out envelope, twice. The card stays "
+         "readable throughout.",
+         ["transition_select grammar", "Add blend"]),
+        ("onair", "ON AIR grammar — DELAYED",
+         anim_plate_delayed(d_bullet, f"held {g['d_min']:.0f} min at "
+                            f"{g['d_name']}"),
+         "Near-black plate, the word in red with pulsing brackets — the "
+         "glow moves, the text never does (their ON AIR screen verbatim). "
+         "Detail line scrolls inside the plate.",
+         [g["d_src"], "on_air_72x16 grammar"]),
+        ("dnd", "DO NOT DISTURB grammar — suspension",
+         anim_plate_norun(g_bullet, "NO", "TRAINS"),
+         f"Two stacked bold lines with baked shadows on the deep-red "
+         f"plate, icon left — their DND screen with the {g['s_route']} "
+         "bullet in the icon slot. Slow calm breathe, nothing else moves.",
+         [g["s_live"], "dnd_72x16 grammar"]),
+        ("keepout", "KEEP OUT grammar — planned work",
+         anim_keepout(g_bullet, "PLANNED", "WORK"),
+         "Yellow plate, black bold text, hazard stripes crawling along the "
+         "top and bottom bands — their KEEP OUT screen recut for weekend "
+         "work alerts.",
+         ["keep_out_72x16 grammar", "for Planned - Part Suspended"]),
         ("contrast", "Blue gradient against a red train",
          anim_contrast(red_bullet or list(bullets_px.values())[0],
                        "REROUTED", BLUE_RGB),
          "Complementary field: a cold blue diagonal sweep drifting behind "
          "the warm red 1 bullet — maximum color contrast at one glance.",
-         ["complementary to line color", "mask-anim drift language"]),
-        ("particles", "Particles — ending_particles language",
-         anim_particles(delayed_card, AMBER_RGB),
-         "Sparse amber pixels twinkling over the dimmed card — the "
-         "firmware's session-ending particle look, recolored for alerts.",
-         ["ending_particles_72x16 language"]),
+         ["complementary to line color", "mask-anim drift grammar"]),
     ):
         blob = b"".join(bytes(v for row in fr for p in row for v in p)
                         for fr in frames)
@@ -943,13 +1043,17 @@ async function load(fresh) {
   const hdr = document.createElement("div");
   hdr.className = "state";
   hdr.innerHTML = `<h2 style="font-size:16px;margin-top:26px">Animated
-    treatments — the firmware's own transition language</h2>
-    <div class="caption">Mined from busybar-firmware: Add-blend washes with
-    fast attack / ~1s decay (busy_presets.c), soft rings expanding from the
-    physical button (transition_select), collapsing oval reveals
-    (transition_oval, Multiply), red particles (ending_particles), breathing
-    background loops. Every panel below is a 72×16 frame sequence the
-    existing anim pipeline can compile to a device-side 60 fps .anim.</div>`;
+    treatments — rebuilt in the stock apps' own grammar</h2>
+    <div class="caption">Studied from busybar-firmware's busy-mode screens
+    (meeting / on_air / dnd / keep_out / booked anims) and its transition
+    system (busy_presets.c): a full-width rounded plate with bevel +
+    vertical ramp, the icon at left, bold text with baked shadows — two
+    stacked 7px lines for long words — and exactly ONE living element per
+    screen (a glow pulse, crawling hazard stripes, a breathing plate, a
+    ring announcing). Fonts map 1:1 to the REST API: bold=busy_bold_7,
+    extra_large=busy_bold_10, tiny=busy_tiny. Every panel is a 72×16 frame
+    sequence the existing pipeline compiles to a device-side 60 fps
+    .anim.</div>`;
   main.append(hdr);
   for (const m of j.treatments) {
     const div = document.createElement("div");
