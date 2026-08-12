@@ -520,43 +520,32 @@ def anim_ripple_ping(card, color):
 
 
 def anim_plate_delayed(bullet_px, sub):
-    """ON AIR grammar: near-black plate, the word in red with pulsing red
-    brackets (the glow lives in the frame, the text never moves), route
-    bullet as the icon, detail line as a tiny in-plate marquee."""
-    base, _edge = _plate("#232326")
+    """DND family: deep-red plate, bullet in the icon slot, DELAYED in
+    bold white over the firmware shadow, detail line as a tiny in-plate
+    marquee. Same calm breathe as the suspension plate."""
+    base, _edge = _plate("#7E1416")
     tw, th, tlit = sim_text("DELAYED", "bold")
     tx0 = 19 + (46 - tw) // 2
     sw, sh, slit = sim_text(sub, "tiny")
     win = 47
     frames = []
-    for i in range(int(4.0 * FPS)):
+    for i in range(int(3.6 * FPS)):
         t = i / FPS
-        f = [row[:] for row in base]
+        k = 0.9 + 0.1 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / 3.6))
+        f = [[tuple(round(v * k) for v in p) for p in row] for row in base]
         _blit_bullet(f, bullet_px, 1, 0)
-        pulse = 0.55 + 0.45 * math.sin(t * 2 * math.pi / 1.6)
-        # ON AIR's living element: a soft red glow breathing UNDER the
-        # word (kept off the bullet), letters pure red on top
-        gcx, gcy = tx0 + tw / 2, 5.5
-        sx2 = 2 * ((tw / 2 + 5) * 0.6) ** 2
-        sy2 = 2 * (3.2 ** 2)
-        strength = 0.20 + 0.30 * pulse
-        for fy in range(16):
-            for fx in range(17, 72):
-                gain = math.exp(-((fx - gcx) ** 2 / sx2
-                                  + (fy - gcy) ** 2 / sy2)) * strength
-                if gain > 0.02:
-                    f[fy][fx] = tuple(min(255, round(c + rc * gain))
-                                      for c, rc in zip(f[fy][fx], RED_RGB))
-        red = tuple(round(c * (0.72 + 0.28 * pulse)) for c in RED_RGB)
         for x, y in tlit:
-            fx, fy = tx0 + x, 2 + y
+            fx, fy = tx0 + x, 1 + y
+            if (x, y + 1) not in tlit and 0 <= fx < 72 and 0 <= fy + 1 < 16:
+                p = f[fy + 1][fx]
+                f[fy + 1][fx] = tuple(round(v * 0.4) for v in p)
             if 0 <= fx < 72 and 0 <= fy < 16:
-                f[fy][fx] = red
+                f[fy][fx] = (255, 255, 255)
         off = int(t * 24) % (sw + 20)
         for x, y in slit:
             sx = 19 + x - off
             if 19 <= sx < 19 + win and 0 <= 10 + y < 16:
-                f[10 + y][sx] = (200, 200, 205)
+                f[10 + y][sx] = (255, 205, 200)
         frames.append(f)
     return frames
 
@@ -759,13 +748,13 @@ def build_treatments(g, bullets, bullets_px):
          "firmware's fast-in/slow-out envelope, twice. The card stays "
          "readable throughout.",
          ["transition_select grammar", "Add blend"]),
-        ("onair", "ON AIR grammar — DELAYED",
+        ("delayed", "DELAYED, in the plate family",
          anim_plate_delayed(d_bullet, f"held {g['d_min']:.0f} min at "
                             f"{g['d_name']}"),
-         "Near-black plate, the word in red with pulsing brackets — the "
-         "glow moves, the text never does (their ON AIR screen verbatim). "
-         "Detail line scrolls inside the plate.",
-         [g["d_src"], "on_air_72x16 grammar"]),
+         "Deep-red plate, bold DELAYED over the firmware shadow, the "
+         "held-time detail scrolling inside the plate. Same family as the "
+         "suspension screen.",
+         [g["d_src"], "dnd_72x16 grammar"]),
         ("dnd", "DO NOT DISTURB grammar — suspension",
          anim_plate_norun(g_bullet, "NO", "TRAINS"),
          f"Two stacked bold lines with baked shadows on the deep-red "

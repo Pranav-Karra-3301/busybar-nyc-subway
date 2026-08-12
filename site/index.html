@@ -97,7 +97,6 @@
 
   /* sections */
   section { padding: 84px 0; }
-  section + section { border-top: 1px solid var(--line); }
   h2 {
     font-size: clamp(26px, 4vw, 38px);
     font-weight: 700;
@@ -116,11 +115,27 @@
 
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
   .card {
+    position: relative;
+    overflow: hidden;
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 16px;
     padding: 26px 24px;
   }
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-repeat: no-repeat;
+    background-position: top right;
+    background-size: 868px 560px; /* fixed so the LED dots stay round */
+    pointer-events: none;
+  }
+  .card > * { position: relative; }
+  .grid .card:nth-child(1)::before { background-image: url(img/card_glow_yellow-486dfc2c.png); }
+  .grid .card:nth-child(2)::before { background-image: url(img/card_glow_blue-72bb1c4a.png); }
+  .grid .card:nth-child(3)::before { background-image: url(img/card_glow_orange-b47543c6.png); }
+  .grid .card:nth-child(4)::before { background-image: url(img/card_glow_green-d37b43e5.png); }
   .card h3 { font-size: 17.5px; font-weight: 600; margin-bottom: 8px; }
   .card p { color: var(--muted); font-size: 15px; line-height: 1.55; }
   .card code { font-size: 13px; }
@@ -172,7 +187,7 @@
     color: var(--muted);
   }
 
-  footer { border-top: 1px solid var(--line); color: var(--faint); padding: 48px 0 64px; font-size: 13.5px; text-align: center; }
+  footer { color: var(--faint); padding: 48px 0 64px; font-size: 13.5px; text-align: center; }
   footer a { color: var(--muted); text-decoration: none; }
   footer a:hover { color: var(--ink); }
   .foot-links { display: flex; gap: 26px; justify-content: center; flex-wrap: wrap; margin-bottom: 20px; }
@@ -199,7 +214,7 @@
 <figure class="strip">
   <div class="wrap">
     <img src="img/bullets.png" alt="Generated route bullets for every NYC subway line: 1-7, A-Z, shuttles, SIR">
-    <figcaption>Every line — express diamonds included — generated at startup in official MTA colors.</figcaption>
+    <figcaption>Every line, generated at startup in official MTA colors.</figcaption>
   </div>
 </figure>
 
@@ -235,6 +250,21 @@
       <figure><img src="img/device_card_nq.png" alt="Yellow N bullet with NOW on the BUSY Bar"><figcaption>Next train, minute-accurate</figcaption></figure>
       <figure><img src="img/device_flash_n.png" alt="Yellow N departure flash on the BUSY Bar"><figcaption>White letters over the firmware's own drop shadow</figcaption></figure>
       <figure><img src="img/device_flash_a.png" alt="Blue A departure flash on the BUSY Bar"><figcaption>Generated for every other line</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>When service breaks</h2>
+    <p class="lede">Suspensions, planned work, delays, held trains. Read live
+    from the MTA's alert and vehicle feeds, drawn in the Bar's own screen
+    language.</p>
+    <div class="shots">
+      <figure><img src="img/status_alert.gif" width="768" height="248" alt="Amber dot on the departure card, then a red ALERT page with a scrolling MTA headline"><figcaption>Delays scroll the real headline</figcaption></figure>
+      <figure><img src="img/status_noservice.gif" width="768" height="248" alt="Deep red page with a route bullet and stacked NO TRAINS"><figcaption>Suspended service</figcaption></figure>
+      <figure><img src="img/status_planned.gif" width="768" height="248" alt="Yellow page with hazard stripe edges and stacked PLANNED WORK"><figcaption>Planned work</figcaption></figure>
+      <figure><img src="img/status_delayed.gif" width="768" height="248" alt="Red page reading DELAYED with how long a train has been held"><figcaption>Delayed, and for how long</figcaption></figure>
     </div>
   </div>
 </section>

@@ -234,6 +234,25 @@ white mode — only the letter ink and its shadow footprint may differ from
 the legacy assets, and the shadow pixels must equal the legacy pixel times
 its exact ratio.
 
+## Service status
+
+The app also reads the MTA's realtime alert and vehicle data: the Mercury
+subway-alerts feed, VehiclePositions for held-train detection, and the NYCT
+scheduled/actual track extension in trip updates (still no API key).
+Service problems take over the full display, drawn in the firmware's own
+screen grammar. Suspensions get a deep red plate with the route bullet and
+stacked NO TRAINS; planned work a yellow plate with hazard stripe edges and
+stacked PLANNED WORK; a physically held train a red DELAYED page with how
+long it has been stuck; a track change a blue EXPRESS TRACK page. Ordinary
+delays put a small amber dot in the corner of the departure card, and every
+so often an amber flash sweeps in a red ALERT page where the real MTA
+headline scrolls, then the card returns.
+
+<p align="center">
+  <img src="docs/img/status_alert.gif" width="390" alt="Delay alert, scrolling MTA headline">
+  <img src="docs/img/status_noservice.gif" width="390" alt="Suspension, NO TRAINS">
+</p>
+
 ## Development
 
 ```sh
