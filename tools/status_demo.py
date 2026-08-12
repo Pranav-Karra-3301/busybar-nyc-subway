@@ -628,7 +628,7 @@ def anim_alert_cycle(card, bullet_px, headline):
     aw, ah, alit = sim_text("ALERT", "bold")
     hw, hh, hlit = sim_text(headline, "tiny")
     win = 47
-    plate_secs = (hw + win + 20) / 40
+    plate_secs = (hw + win + 20) / 24  # ~= the device's 1400px/min marquee
     frames = []
     total = 2.0 + 0.9 + plate_secs + 0.9
     for i in range(int(total * FPS)):
@@ -645,7 +645,7 @@ def anim_alert_cycle(card, bullet_px, headline):
                     p = f[fy + 1][fx]
                     f[fy + 1][fx] = tuple(round(v * 0.4) for v in p)
                 f[fy][fx] = (255, 255, 255)
-            off = int((t - 2.9) * 40) % (hw + win + 20) - win
+            off = int((t - 2.9) * 24) % (hw + win + 20) - win
             for x, y in hlit:
                 sx = 19 + x - off - 0
                 if 19 <= sx < 19 + win and 0 <= 10 + y < 16:
@@ -744,7 +744,7 @@ def build_treatments(g, bullets, bullets_px):
     out = []
     for name, title, frames, caption, tags in (
         ("cycle", "Card ⇄ alert page — the real proposal",
-         anim_alert_cycle(alert_card, a3_bullet, head[:80]),
+         anim_alert_cycle(alert_card, a3_bullet, head[:52]),
          "The next-train card keeps a quiet amber dot; a ping announces, "
          "the wash peak covers the cut to a full-screen alert plate "
          "(bullet + ALERT + in-plate marquee, busy-mode box geometry), one "
@@ -893,11 +893,15 @@ def sim_render(elements, bullets_px):
             if align == "top_right":
                 x0, y0 = ax - (min(w, win or w)) + 1, ay
             elif align == "bottom_left":
-                x0, y0 = ax, ay - h + 1
+                # the device anchors the LINE BOX bottom at y; the fonts
+                # keep descender space below the ink (measured off frame
+                # dumps: bold "min" at y=15 inks rows 6-12, tiny 10-13)
+                x0 = ax
+                y0 = ay - h + 1 - {"tiny": 2, "bold": 3}.get(el["font"], 3)
             elif align == "mid_right":
-                # baseline-anchored like the device: frame dumps show the
-                # XL digit's bottom row landing at ay+6 next to bold "min"
-                x0, y0 = ax - w + 1, ay + 7 - h
+                # geometric center, verified: XL digit at y=8 inks rows
+                # 3-12 on hardware
+                x0, y0 = ax - w + 1, ay - h // 2
             elif align == "center":
                 x0, y0 = ax - w // 2, ay - h // 2
             else:
