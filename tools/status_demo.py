@@ -492,9 +492,10 @@ def baked_screen_rows(sa, key, bullet_px=None):
     return f
 
 
-def marquee_overlay(f, text, t, color=(255, 205, 200)):
-    """The in-plate marquee at device speed, ink rows 10-13."""
-    w, h, lit = sim_text(text, "tiny")
+def marquee_overlay(f, text, t, color=(255, 255, 255)):
+    """The in-plate marquee at device speed: the small face, ink rows
+    10-14, white unless the plate needs dark."""
+    w, h, lit = sim_text(text, "small")
     off = int(t * 24) % (w + 20)
     for x, y in lit:
         sx = 19 + x - off
@@ -630,7 +631,7 @@ def anim_trackchange(sa, bullet_px, mq):
         t = i / FPS
         k = 0.93 + 0.07 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / 3.6))
         f = [[tuple(round(v * k) for v in p) for p in row] for row in base]
-        marquee_overlay(f, mq.upper(), t, color=(202, 220, 255))
+        marquee_overlay(f, mq.upper(), t)
         frames.append(f)
     return frames
 
@@ -729,6 +730,7 @@ def build_treatments(g, bullets, bullets_px, sa):
 # ------------------------------------------------- simulated board (serve)
 
 SIM_FONTS = {"tiny": ("TINY_GLYPHS", 5), "bold": ("BULLET_GLYPHS", 7),
+             "small": ("SMALL_GLYPHS", 5),
              "extra_large": ("XL_GLYPHS", 10)}
 
 
@@ -860,7 +862,7 @@ def build_payload(captures_dir):
     for key, a in sa.items():
         if key == "wash":
             continue
-        img = Image.open(io.BytesIO(a["bytes"])).convert("RGBA")
+        img = Image.open(io.BytesIO(a["png"])).convert("RGBA")
         px = img.load()
         bullets_px[a["name"]] = [[px[x, y] for x in range(72)]
                                  for y in range(16)]
