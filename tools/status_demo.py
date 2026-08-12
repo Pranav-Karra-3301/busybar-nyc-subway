@@ -210,17 +210,26 @@ def state_delayed(bullets, route, stop_name, held_min):
 
 
 def state_not_running(bullets, route, head, period):
-    return [
+    """DND grammar: deep-red plate asset, bullet in the icon slot, two
+    stacked bold lines with a shadow copy each — all plain draw elements,
+    so the real app can render this exact screen today."""
+    els = [
+        {"id": "plate", "type": "image",
+         "path": bullets.get("_plate_dnd", "mem:plate_dnd"),
+         "x": 0, "y": 0, "timeout": 30},
         {"id": "bullet", "type": "image", "path": bullets[route],
          "x": 1, "y": 0, "timeout": 30},
-        {"id": "big", "type": "text", "text": f"NO {route} TRAINS",
-         "font": "tiny", "color": WHITE, "x": 19, "y": 2,
-         "align": "top_left", "timeout": 30},
-        {"id": "sub", "type": "text", "text": plain(f"{head} - {period}"),
-         "font": "tiny", "color": AMBER, "x": 19, "y": 15,
-         "align": "bottom_left", "width": 50, "scroll_rate": 1500,
-         "timeout": 30},
     ]
+    for i, (text, y0) in enumerate((("NO", 1), ("TRAINS", 8))):
+        w, _h, _lit = sim_text(text, "bold")
+        x0 = 19 + (46 - w) // 2
+        els.append({"id": f"l{i}s", "type": "text", "text": text,
+                    "font": "bold", "color": "#00000091", "x": x0,
+                    "y": y0 + 1, "align": "top_left", "timeout": 30})
+        els.append({"id": f"l{i}", "type": "text", "text": text,
+                    "font": "bold", "color": WHITE, "x": x0, "y": y0,
+                    "align": "top_left", "timeout": 30})
+    return els
 
 
 def state_alert_dot(bullets, route, mins, head):
@@ -333,6 +342,16 @@ def push_main(args):
     bar = connect_bar()
     bullets = upload_bullets(
         bar, {g["d_route"], g["s_route"], g["a3_route"], "N"})
+    plate = app.png_encode(72, 16, _plate_rgba("#7E1416"))
+    plate_name = f"sd_plate_{hashlib.sha256(plate).hexdigest()[:8]}.png"
+    r = bar.s.post(bar.t.url("/assets/upload"),
+                   params={"application_name": app.APP_NAME,
+                           "file": plate_name},
+                   headers={**bar.t.headers,
+                            "Content-Type": "application/octet-stream"},
+                   data=plate, timeout=20)
+    r.raise_for_status()
+    bullets["_plate_dnd"] = plate_name
     cap = args.capture
     if cap:
         cap.mkdir(parents=True, exist_ok=True)
@@ -344,8 +363,7 @@ def push_main(args):
                 bullets, g["s_route"], plain(g["s"]["head"]),
                 g["s"]["period"])),
             ("alert", state_alert_dot(bullets, g["a3_route"], 7,
-                                      g["a3"]["head"])),
-            ("track", state_track(bullets, "N", 4, "D3"))):
+                                      g["a3"]["head"]))):
         bar.clear()
         if not bar.draw(els):
             sys.exit("Bar is busy (something higher-priority owns it)")
@@ -516,17 +534,24 @@ def anim_plate_delayed(bullet_px, sub):
         f = [row[:] for row in base]
         _blit_bullet(f, bullet_px, 1, 0)
         pulse = 0.55 + 0.45 * math.sin(t * 2 * math.pi / 1.6)
+        # ON AIR's living element: a soft red glow breathing UNDER the
+        # word (kept off the bullet), letters pure red on top
+        gcx, gcy = tx0 + tw / 2, 5.5
+        sx2 = 2 * ((tw / 2 + 5) * 0.6) ** 2
+        sy2 = 2 * (3.2 ** 2)
+        strength = 0.20 + 0.30 * pulse
+        for fy in range(16):
+            for fx in range(17, 72):
+                gain = math.exp(-((fx - gcx) ** 2 / sx2
+                                  + (fy - gcy) ** 2 / sy2)) * strength
+                if gain > 0.02:
+                    f[fy][fx] = tuple(min(255, round(c + rc * gain))
+                                      for c, rc in zip(f[fy][fx], RED_RGB))
         red = tuple(round(c * (0.72 + 0.28 * pulse)) for c in RED_RGB)
         for x, y in tlit:
             fx, fy = tx0 + x, 2 + y
             if 0 <= fx < 72 and 0 <= fy < 16:
                 f[fy][fx] = red
-        glow = tuple(round(c * pulse) for c in RED_RGB)
-        for bx, inward in ((tx0 - 5, 1), (tx0 + tw + 3, -1)):
-            for yy in range(2, 9):
-                xx = bx + (inward if yy in (2, 8) else 0)
-                if 0 <= xx < 72:
-                    f[yy][xx] = glow
         off = int(t * 24) % (sw + 20)
         for x, y in slit:
             sx = 19 + x - off
@@ -583,8 +608,12 @@ def anim_keepout(bullet_px, line1, line2):
             x0 = 19 + (46 - w) // 2
             for x, y in lit:
                 fx, fy = x0 + x, y0 + y
+                if (x, y + 1) not in lit and 0 <= fx < 72 and \
+                        1 <= fy + 1 < 15:
+                    p = f[fy + 1][fx]
+                    f[fy + 1][fx] = tuple(round(v * 0.4) for v in p)
                 if 0 <= fx < 72 and 1 <= fy < 15:
-                    f[fy][fx] = (10, 8, 0)
+                    f[fy][fx] = (255, 255, 255)
         frames.append(f)
     return frames
 
@@ -654,6 +683,42 @@ def anim_contrast(bullet_px, text, color):
     return frames
 
 
+def anim_trackchange(bullet_px):
+    """Track change, said plainly: the blue contrast sweep carrying two
+    stacked bold lines — EXPRESS / TRACK — DND stacking on the field
+    people liked, instead of a cryptic corner badge."""
+    frames = []
+    for i in range(int(3.0 * FPS)):
+        t = i / FPS
+        f = _blank()
+        phase = t / 3.0 * 72
+        for y in range(16):
+            for x in range(72):
+                v = 0.28 + 0.24 * math.sin((x + y * 2 - phase * 2)
+                                           * math.pi / 36)
+                f[y][x] = tuple(min(255, round(c * v)) for c in BLUE_RGB)
+        _blit_bullet(f, bullet_px, 1, 0)
+        for text, y0 in (("EXPRESS", 1), ("TRACK", 8)):
+            w, h, lit = sim_text(text, "bold")
+            x0 = 19 + (46 - w) // 2
+            for x, y in lit:
+                fx, fy = x0 + x, y0 + y
+                if (x, y + 1) not in lit and 0 <= fx < 72 and \
+                        0 <= fy + 1 < 16:
+                    p = f[fy + 1][fx]
+                    f[fy + 1][fx] = tuple(round(v * 0.35) for v in p)
+                if 0 <= fx < 72 and 0 <= fy < 16:
+                    f[fy][fx] = (255, 255, 255)
+        frames.append(f)
+    return frames
+
+
+def _plate_rgba(hexc):
+    rows, _ = _plate(hexc)
+    return [[(0, 0, 0, 0) if p == (0, 0, 0) else (*p, 255) for p in row]
+            for row in rows]
+
+
 def flatten_state(elements, bullets_px):
     """A state's element list -> one static 72x16 frame (tickers frozen at
     their start position) to run treatments over."""
@@ -709,10 +774,19 @@ def build_treatments(g, bullets, bullets_px):
          [g["s_live"], "dnd_72x16 grammar"]),
         ("keepout", "KEEP OUT grammar — planned work",
          anim_keepout(g_bullet, "PLANNED", "WORK"),
-         "Yellow plate, black bold text, hazard stripes crawling along the "
-         "top and bottom bands — their KEEP OUT screen recut for weekend "
-         "work alerts.",
+         "Yellow plate, white bold text over the firmware shadow (matching "
+         "the app's white-letter identity), hazard stripes crawling along "
+         "the top and bottom edges — their KEEP OUT screen recut for "
+         "weekend work alerts.",
          ["keep_out_72x16 grammar", "for Planned - Part Suspended"]),
+        ("trackchange", "Track change — said plainly",
+         anim_trackchange(bullets_px.get(f"mem:{g['d_route']}")
+                          or red_bullet),
+         "EXPRESS / TRACK stacked DND-style on the blue contrast sweep — "
+         "replaces the cryptic corner badge. Fires when "
+         "NyctStopTimeUpdate's actual_track diverges from scheduled_track "
+         "(both present on every stop update, verified 1347/1347).",
+         ["NYCT GTFS-RT extension", "diff simulated tonight"]),
         ("contrast", "Blue gradient against a red train",
          anim_contrast(red_bullet or list(bullets_px.values())[0],
                        "REROUTED", BLUE_RGB),
@@ -821,7 +895,9 @@ def sim_render(elements, bullets_px):
             elif align == "bottom_left":
                 x0, y0 = ax, ay - h + 1
             elif align == "mid_right":
-                x0, y0 = ax - w + 1, ay - h // 2
+                # baseline-anchored like the device: frame dumps show the
+                # XL digit's bottom row landing at ay+6 next to bold "min"
+                x0, y0 = ax - w + 1, ay + 7 - h
             elif align == "center":
                 x0, y0 = ax - w // 2, ay - h // 2
             else:
@@ -850,6 +926,7 @@ def build_payload(captures_dir):
         px = img.load()
         bullets_px[f"mem:{d}"] = [[px[x, y] for x in range(15)]
                                   for y in range(15)]
+    bullets_px["mem:plate_dnd"] = _plate_rgba("#7E1416")
 
     states = [
         ("normal", "Today's card (for contrast)", state_normal(
@@ -866,22 +943,17 @@ def build_payload(captures_dir):
         ("not_running", "NOT RUNNING — (part-)suspension", state_not_running(
             bullets, g["s_route"], plain(g["s"]["head"]), g["s"]["period"]),
          f"{g['s']['type']}: “{plain(g['s']['head'])}” "
-         f"({g['s']['period'] or 'no period given'}). Scoped to route + "
-         "stop + direction, with machine-readable active windows.",
+         f"({g['s']['period'] or 'no period given'}). The DND-grammar "
+         "plate rendered from plain draw elements (plate image + bullet + "
+         "shadowed text), so the shipped app can draw this exact screen.",
          [g["s_live"], "Mercury subway-alerts feed"]),
         ("alert", "SERVICE ALERT — trains still running", state_alert_dot(
             bullets, g["a3_route"], 7, g["a3"]["head"]),
          f"Delays alert on the {g['a3_route']}: "
-         f"“{plain(g['a3']['head'])}” — normal card keeps the "
-         "minutes, amber corner dot + headline ticker carry the alert.",
+         f"“{plain(g['a3']['head'])}” — the card keeps its minutes, the "
+         "amber corner dot marks the alert; the full story lives in the "
+         "card ⇄ alert page cycle below.",
          [g["a3_live"], "Mercury subway-alerts feed, type=Delays"]),
-        ("track", "TRACK CHANGE — express/local swap", state_track(
-            bullets, "N", 4, "D3"),
-         "NyctStopTimeUpdate carries scheduled_track AND actual_track on "
-         "every stop update; when they differ the badge shows the actual "
-         "track (no live diff at build time, so the D3 value is simulated).",
-         ["field verified live: 1347/1347 updates", "simulated diff",
-          "NYCT GTFS-RT extension"]),
     ]
 
     out = []
