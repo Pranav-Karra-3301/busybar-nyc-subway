@@ -17,8 +17,13 @@ show over the subway app, which reclaims the screen afterwards):
                    stop_time_update carries both); badge shows the actual
                    track when it differs (simulated when none is live).
 
-    ~/busybar/app/.venv/bin/python tools/status_demo.py [--hold SECS]
-    ... --capture DIR    # also frame-dump each state (USB only)
+    ~/busybar/app/.venv/bin/python tools/status_demo.py
+        # default: --serve — local viewer at http://localhost:8766 with a
+        # simulated LED board (no device needed; text approximated in caps
+        # from the app's glyph tables). --captures DIR embeds real hardware
+        # frame dumps alongside.
+    ... --push [--hold SECS] [--capture DIR]
+        # push the states to the physical Bar (only with --push)
 """
 import argparse
 import base64
@@ -268,58 +273,81 @@ def capture(bar, out_path):
         pass
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--hold", type=float, default=8.0)
-    ap.add_argument("--capture", type=Path)
-    args = ap.parse_args()
-    now = time.time()
+def state_normal(bullets, route, mins):
+    return [
+        {"id": "bullet", "type": "image", "path": bullets[route],
+         "x": 1, "y": 0, "timeout": 30},
+        {"id": "num", "type": "text", "text": str(mins), "font": "extra_large",
+         "color": WHITE, "align": "mid_right", "x": 34, "y": 8,
+         "timeout": 30},
+        {"id": "unit", "type": "text", "text": "min", "font": "bold",
+         "color": WHITE, "align": "bottom_left", "x": 37, "y": 15,
+         "timeout": 30},
+    ] + dots([app.line_color(route)] * 3)
 
-    print("pulling live MTA data…")
+
+def gather():
+    """Pull the live feeds and bind each state to the best real instance."""
+    now = time.time()
     alerts = fetch_alerts()
     held = fetch_held_train()
     names = stop_names()
 
-    # 1: a really-held train, else a canned example clearly labeled
     if held:
         d_route, d_stop, d_min = held
-        d_src = "LIVE VehiclePositions"
+        d_src = "LIVE — VehiclePositions"
     else:
         d_route, d_stop, d_min = "N", "Q01", 6
         d_src = "simulated (no train held >2.5 min right now)"
     d_name = names.get(d_stop, d_stop)
 
-    # 2: a suspension for G if there is one, else any route
     susp = [a for a in alerts if "Suspended" in a["type"] and a["head"]]
     susp.sort(key=lambda a: (("G" not in a["routes"]),
                              not active_now(a, now)))
-    s = susp[0]
+    s = susp[0] if susp else dict(routes={"G"}, head="No G service",
+                                  period="", type="Planned - Suspended")
     s_route = "G" if "G" in s["routes"] else sorted(s["routes"])[0]
-    s_live = "ACTIVE NOW" if active_now(s, now) else f"upcoming ({s['period']})"
+    s_live = ("ACTIVE NOW" if active_now(s, now)
+              else f"upcoming — {s['period']}")
 
-    # 3: a live Delays-type alert, else the freshest one
     dly = [a for a in alerts if a["type"] == "Delays"]
     dly.sort(key=lambda a: not active_now(a, now))
-    a3 = dly[0] if dly else dict(routes={"Q"}, head="delays", period="")
+    a3 = dly[0] if dly else dict(routes={"Q"}, head="delays", period="",
+                                 type="Delays", windows=[])
     a3_route = sorted(a3["routes"] & set(app.DESIGNATOR_META) or {"Q"})[0]
+    a3_live = "ACTIVE NOW" if dly and active_now(a3, now) else \
+        "most recent (window closed)"
 
-    print(f"1 DELAYED:     {d_route} held {d_min:.0f} min at {d_name} "
-          f"[{d_src}]")
-    print(f"2 NOT RUNNING: {s_route} — {s['head'][:70]} [{s_live}]")
-    print(f"3 ALERT:       {a3_route} — {plain(a3['head'])[:70]}")
+    return dict(d_route=d_route, d_name=d_name, d_min=d_min, d_src=d_src,
+                s=s, s_route=s_route, s_live=s_live,
+                a3=a3, a3_route=a3_route, a3_live=a3_live)
+
+
+def push_main(args):
+    print("pulling live MTA data…")
+    g = gather()
+    print(f"1 DELAYED:     {g['d_route']} held {g['d_min']:.0f} min at "
+          f"{g['d_name']} [{g['d_src']}]")
+    print(f"2 NOT RUNNING: {g['s_route']} — {g['s']['head'][:70]} "
+          f"[{g['s_live']}]")
+    print(f"3 ALERT:       {g['a3_route']} — {plain(g['a3']['head'])[:70]}")
     print("4 TRACK:       badge TK D3 (extension field; simulated diff)")
 
     bar = connect_bar()
-    bullets = upload_bullets(bar, {d_route, s_route, a3_route, "N"})
+    bullets = upload_bullets(
+        bar, {g["d_route"], g["s_route"], g["a3_route"], "N"})
     cap = args.capture
     if cap:
         cap.mkdir(parents=True, exist_ok=True)
 
     for name, els in (
-            ("delayed", state_delayed(bullets, d_route, d_name, d_min)),
+            ("delayed", state_delayed(bullets, g["d_route"], g["d_name"],
+                                      g["d_min"])),
             ("not_running", state_not_running(
-                bullets, s_route, plain(s["head"]), s["period"])),
-            ("alert", state_alert_dot(bullets, a3_route, 7, a3["head"])),
+                bullets, g["s_route"], plain(g["s"]["head"]),
+                g["s"]["period"])),
+            ("alert", state_alert_dot(bullets, g["a3_route"], 7,
+                                      g["a3"]["head"])),
             ("track", state_track(bullets, "N", 4, "D3"))):
         bar.clear()
         if not bar.draw(els):
@@ -331,6 +359,392 @@ def main():
         time.sleep(max(0, args.hold - 1.3))
     bar.clear()
     print("done — subway app reclaims the screen in a few seconds")
+
+
+# ------------------------------------------------- simulated board (serve)
+
+SIM_FONTS = {"tiny": ("TINY_GLYPHS", 5), "bold": ("BULLET_GLYPHS", 7),
+             "extra_large": ("XL_GLYPHS", 10)}
+
+
+def _punct(h):
+    """Tiny synthesized punctuation the glyph tables lack: char ->
+    (width, {(x, y), ...})."""
+    mid = h // 2
+    slash_w = max(2, h // 3 + 1)
+    return {
+        "-": (3, {(x, mid) for x in range(3)}),
+        ".": (1, {(0, h - 1)}),
+        ",": (2, {(1, h - 2), (0, h - 1)}),
+        ":": (1, {(0, mid - 1), (0, mid + 1)}),
+        "'": (1, {(0, 0), (0, 1)}),
+        "/": (slash_w, {((h - 1 - y) * (slash_w - 1) // max(h - 1, 1), y)
+                        for y in range(h)}),
+        "+": (3, {(x, mid) for x in range(3)} | {(1, mid - 1), (1, mid + 1)}),
+    }
+
+
+def sim_text(text, font):
+    """(w, h, lit-set) — caps-only approximation from the app's own glyph
+    tables (the real device renders lowercase; close enough for a mock)."""
+    table = getattr(app, SIM_FONTS[font][0])
+    h = SIM_FONTS[font][1]
+    punct = _punct(h)
+    x = 0
+    lit = set()
+    for ch in text.upper():
+        if ch == " ":
+            x += 3 if font == "tiny" else 4
+            continue
+        g = table.get(ch)
+        if g:
+            gw, gh = len(g[0]), len(g)
+            y0 = h - gh
+            lit |= {(x + gx, y0 + gy) for gy, row in enumerate(g)
+                    for gx, c in enumerate(row) if c == "#"}
+            x += gw + 1
+        elif ch in punct:
+            pw, pts = punct[ch]
+            lit |= {(x + px, py) for px, py in pts}
+            x += pw + 1
+        else:
+            x += 2
+    return max(x - 1, 1), h, lit
+
+
+def _hex_rgba(c):
+    c = c.lstrip("#")
+    return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def sim_render(elements, bullets_px):
+    """Render a state's element list the way the firmware would: a 72x16
+    base frame plus ticker strips for scrolling labels."""
+    base = [[(0, 0, 0)] * 72 for _ in range(16)]
+    tickers = []
+
+    def stamp(lit, color, x0, y0):
+        for x, y in lit:
+            if 0 <= x0 + x < 72 and 0 <= y0 + y < 16:
+                base[y0 + y][x0 + x] = color
+
+    for el in elements:
+        t = el["type"]
+        if t == "image":
+            px = bullets_px[el["path"]]
+            for y, row in enumerate(px):
+                for x, p in enumerate(row):
+                    if p[3] and 0 <= el["x"] + x < 72 and \
+                            0 <= el["y"] + y < 16:
+                        base[el["y"] + y][el["x"] + x] = p[:3]
+        elif t == "rectangle":
+            color = _hex_rgba(el["fill_colors"][0])
+            for y in range(el["height"]):
+                for x in range(el["width"]):
+                    if 0 <= el["x"] + x < 72 and 0 <= el["y"] + y < 16:
+                        base[el["y"] + y][el["x"] + x] = color
+        elif t == "text":
+            w, h, lit = sim_text(el["text"], el["font"])
+            color = _hex_rgba(el["color"])
+            align = el.get("align", "top_left")
+            ax, ay = el["x"], el["y"]
+            win = el.get("width")
+            if align == "top_right":
+                x0, y0 = ax - (min(w, win or w)) + 1, ay
+            elif align == "bottom_left":
+                x0, y0 = ax, ay - h + 1
+            elif align == "mid_right":
+                x0, y0 = ax - w + 1, ay - h // 2
+            elif align == "center":
+                x0, y0 = ax - w // 2, ay - h // 2
+            else:
+                x0, y0 = ax, ay
+            if win and w > win:
+                strip = [[(0, 0, 0, 0)] * w for _ in range(h)]
+                for x, y in lit:
+                    strip[y][x] = (*color, 255)
+                tickers.append(dict(x=x0, y=y0, win=win, w=w, h=h,
+                                    rate=el.get("scroll_rate", 1200),
+                                    strip=strip))
+            else:
+                stamp(lit, color, x0, y0)
+    return base, tickers
+
+
+def build_payload(captures_dir):
+    from PIL import Image
+    import io
+    g = gather()
+    routes = {g["d_route"], g["s_route"], g["a3_route"], "N"}
+    bullets = {d: f"mem:{d}" for d in routes}
+    bullets_px = {}
+    for d in routes:
+        img = Image.open(io.BytesIO(app.make_bullet(d))).convert("RGBA")
+        px = img.load()
+        bullets_px[f"mem:{d}"] = [[px[x, y] for x in range(15)]
+                                  for y in range(15)]
+
+    states = [
+        ("normal", "Today's card (for contrast)", state_normal(
+            bullets, "N", 3),
+         "The shipped next-train card: bullet, minutes, position dots.",
+         ["baseline"]),
+        ("delayed", "DELAYED — train physically held", state_delayed(
+            bullets, g["d_route"], g["d_name"], g["d_min"]),
+         f"{g['d_route']} train stopped at {g['d_name']} for "
+         f"{g['d_min']:.0f} minutes and not moving — VehiclePositions "
+         "STOPPED_AT + stale timestamp, the same signal the platform "
+         "clocks turn into “Delayed”.",
+         [g["d_src"], "GTFS-RT VehiclePositions"]),
+        ("not_running", "NOT RUNNING — (part-)suspension", state_not_running(
+            bullets, g["s_route"], plain(g["s"]["head"]), g["s"]["period"]),
+         f"{g['s']['type']}: “{plain(g['s']['head'])}” "
+         f"({g['s']['period'] or 'no period given'}). Scoped to route + "
+         "stop + direction, with machine-readable active windows.",
+         [g["s_live"], "Mercury subway-alerts feed"]),
+        ("alert", "SERVICE ALERT — trains still running", state_alert_dot(
+            bullets, g["a3_route"], 7, g["a3"]["head"]),
+         f"Delays alert on the {g['a3_route']}: "
+         f"“{plain(g['a3']['head'])}” — normal card keeps the "
+         "minutes, amber corner dot + headline ticker carry the alert.",
+         [g["a3_live"], "Mercury subway-alerts feed, type=Delays"]),
+        ("track", "TRACK CHANGE — express/local swap", state_track(
+            bullets, "N", 4, "D3"),
+         "NyctStopTimeUpdate carries scheduled_track AND actual_track on "
+         "every stop update; when they differ the badge shows the actual "
+         "track (no live diff at build time, so the D3 value is simulated).",
+         ["field verified live: 1347/1347 updates", "simulated diff",
+          "NYCT GTFS-RT extension"]),
+    ]
+
+    out = []
+    for name, title, els, caption, tags in states:
+        base, tickers = sim_render(els, bullets_px)
+        cap_url = None
+        if captures_dir:
+            p = captures_dir / f"state_{name}.png"
+            if p.exists():
+                cap_url = ("data:image/png;base64,"
+                           + base64.b64encode(p.read_bytes()).decode())
+        out.append(dict(
+            name=name, title=title, caption=caption, tags=tags,
+            base=base64.b64encode(bytes(
+                v for row in base for p in row for v in p)).decode(),
+            tickers=[dict(x=t["x"], y=t["y"], win=t["win"], w=t["w"],
+                          h=t["h"], rate=t["rate"],
+                          strip=base64.b64encode(bytes(
+                              v for row in t["strip"] for p in row
+                              for v in p)).decode())
+                     for t in tickers],
+            capture=cap_url))
+    return dict(generated=time.strftime("%H:%M:%S"), states=out)
+
+
+SIM_PAGE = r"""<!doctype html>
+<meta charset="utf-8">
+<title>MTA status concepts — BUSY Bar</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0c0c0e; color: #e8e8ea;
+         font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 14px;
+           padding: 16px 26px; border-bottom: 1px solid #232328;
+           position: sticky; top: 0; background: #121215; z-index: 3; }
+  h1 { font-size: 16px; margin: 0; }
+  #meta { color: #9a9aa2; font-size: 12.5px; margin-right: auto; }
+  button { background: #1d1d22; color: #e8e8ea; border: 1px solid #303038;
+           border-radius: 7px; padding: 6px 12px; font: inherit;
+           cursor: pointer; }
+  button:hover { background: #26262c; }
+  main { max-width: 820px; margin: 0 auto; padding: 22px 26px 80px; }
+  .state { margin: 26px 0 38px; }
+  .state h2 { font-size: 14px; margin: 0 0 10px;
+              letter-spacing: .04em; }
+  .board { background: #08080a; border: 1px solid #232328;
+           border-radius: 12px; padding: 14px; }
+  canvas { display: block; width: 100%; image-rendering: auto; }
+  .caption { color: #b7b7bf; font-size: 13.5px; margin-top: 10px; }
+  .tags { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { font-size: 11px; padding: 2px 9px; border-radius: 999px;
+         border: 1px solid #303038; color: #9a9aa2; }
+  .tag.live { border-color: #1d7c3b; color: #6fd487; }
+  .tag.sim { border-color: #7c5a1d; color: #ffb64f; }
+  .hw { margin-top: 10px; }
+  .hw img { width: 100%; border-radius: 8px; display: block; }
+  .hw figcaption { color: #6f6f78; font-size: 11.5px; margin-top: 5px; }
+  .note { color: #6f6f78; font-size: 12.5px; margin-top: 30px;
+          line-height: 1.7; }
+</style>
+<header>
+  <h1>MTA status concepts</h1>
+  <span id="meta">loading live data…</span>
+  <button id="refresh">Refresh live data</button>
+</header>
+<main id="main"></main>
+<script>
+const SCALE = 10, GAP = 15;
+let t0 = performance.now();
+
+function decode(b64, w, h, rgba) {
+  const bin = atob(b64), n = rgba ? 4 : 3;
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function drawBoard(ctx, base, tickers, tms) {
+  const W = 72, H = 16;
+  const frame = new Uint8Array(base);          // copy RGB base
+  for (const t of tickers) {
+    const px = (t.rate / 60000) * tms;
+    const off = Math.floor(px % (t.w + GAP));
+    for (let y = 0; y < t.h; y++) for (let x = 0; x < t.win; x++) {
+      const sx = x + off;
+      let p = null;
+      if (sx < t.w) p = sx; else if (sx - t.w - GAP >= 0 &&
+                                     sx - t.w - GAP < t.w) p = sx - t.w - GAP;
+      if (p === null) continue;
+      const s = (y * t.w + p) * 4;
+      if (t.data[s + 3] === 0) continue;
+      const bx = t.x + x, by = t.y + y;
+      if (bx < 0 || bx >= W || by < 0 || by >= H) continue;
+      const d = (by * W + bx) * 3;
+      frame[d] = t.data[s]; frame[d+1] = t.data[s+1]; frame[d+2] = t.data[s+2];
+    }
+  }
+  ctx.fillStyle = "#08080a";
+  ctx.fillRect(0, 0, W * SCALE, H * SCALE);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 3;
+    const lit = frame[i] + frame[i+1] + frame[i+2] > 0;
+    ctx.fillStyle = lit ? `rgb(${frame[i]},${frame[i+1]},${frame[i+2]})`
+                        : "#141416";
+    ctx.beginPath();
+    ctx.arc((x + .5) * SCALE, (y + .5) * SCALE, SCALE * .37, 0, 6.2832);
+    ctx.fill();
+  }
+}
+
+let boards = [];
+function loop() {
+  const tms = performance.now() - t0;
+  for (const b of boards) drawBoard(b.ctx, b.base, b.tickers, tms);
+  requestAnimationFrame(loop);
+}
+
+async function load(fresh) {
+  document.getElementById("meta").textContent = "pulling live MTA data…";
+  const j = await (await fetch("/demo" + (fresh ? "?fresh=1" : ""))).json();
+  const main = document.getElementById("main");
+  main.innerHTML = "";
+  boards = [];
+  for (const s of j.states) {
+    const div = document.createElement("div");
+    div.className = "state";
+    const tags = s.tags.map(t => {
+      const cls = /LIVE|ACTIVE/.test(t) ? "tag live"
+                : /simulated/.test(t) ? "tag sim" : "tag";
+      return `<span class="${cls}">${t}</span>`;
+    }).join("");
+    div.innerHTML = `<h2>${s.title}</h2>
+      <div class="board"><canvas width="720" height="160"></canvas></div>
+      <div class="caption">${s.caption}</div>
+      <div class="tags">${tags}</div>` +
+      (s.capture ? `<figure class="hw"><img src="${s.capture}">
+        <figcaption>the same state captured off the physical Bar earlier
+        (real firmware fonts)</figcaption></figure>` : "");
+    main.append(div);
+    const ctx = div.querySelector("canvas").getContext("2d");
+    boards.push({
+      ctx,
+      base: decode(s.base, 72, 16, false),
+      tickers: s.tickers.map(t => ({...t, data: decode(t.strip, t.w, t.h,
+                                                       true)})),
+    });
+  }
+  document.getElementById("meta").textContent =
+    `live MTA data pulled ${j.generated} — board is simulated ` +
+    `(caps-only glyphs); nothing touches the Bar`;
+}
+
+document.getElementById("refresh").onclick = () => load(true);
+load(false);
+loop();
+</script>
+"""
+
+
+def serve(args):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import webbrowser
+
+    cache = {"t": 0, "payload": None}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            if self.path.startswith("/demo"):
+                fresh = "fresh=1" in self.path
+                if fresh or not cache["payload"] or \
+                        time.time() - cache["t"] > 90:
+                    try:
+                        cache["payload"] = build_payload(args.captures)
+                        cache["t"] = time.time()
+                    except Exception as e:
+                        body = json.dumps({"error": str(e)}).encode()
+                        self.send_response(500)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
+                body = json.dumps(cache["payload"]).encode()
+                ctype = "application/json"
+            elif self.path == "/":
+                body = SIM_PAGE.encode()
+                ctype = "text/html; charset=utf-8"
+            else:
+                self.send_response(404)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
+    srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    url = f"http://localhost:{args.port}"
+    print(f"status demo (simulated board, live data) at {url} — Ctrl-C "
+          "to stop; the Bar is not touched")
+    if not args.no_open:
+        webbrowser.open(url)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--push", action="store_true",
+                    help="drive the physical Bar (default is --serve)")
+    ap.add_argument("--serve", action="store_true")
+    ap.add_argument("--port", type=int, default=8766)
+    ap.add_argument("--no-open", action="store_true")
+    ap.add_argument("--captures", type=Path,
+                    help="dir of hardware frame dumps to embed in the page")
+    ap.add_argument("--hold", type=float, default=8.0)
+    ap.add_argument("--capture", type=Path,
+                    help="with --push: frame-dump each state here")
+    args = ap.parse_args()
+    if args.push:
+        push_main(args)
+    else:
+        serve(args)
 
 
 if __name__ == "__main__":
