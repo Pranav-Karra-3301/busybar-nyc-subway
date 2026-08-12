@@ -2053,7 +2053,11 @@ class App:
     async def demo_alerts(self):
         """Stage every service-status screen with fake data, in sequence:
         card with alert dot, the alert-page cycle, DELAYED plate, the
-        EXPRESS/TRACK page, NO TRAINS plate, PLANNED WORK plate."""
+        EXPRESS/TRACK page, NO TRAINS plate, PLANNED WORK plate. The
+        [demo] markers let capture tooling slice states deterministically."""
+        def mark(name):
+            print(f"[demo] {name}", flush=True)
+
         now = time.time()
         routes = self.cfg["route_ids"]
         self.arrivals = [
@@ -2065,19 +2069,23 @@ class App:
             "kind": "delays", "type": "Delays",
             "head": f"{designator(routes[0])} trains are running with "
                     "delays while we investigate a signal problem",
-            "period": ""}]
+            "period": "", "routes": [designator(routes[0])]}]
+        mark("card_dot")
         await self.render()
         await asyncio.sleep(4)
+        mark("alert_cycle")
         await self.alert_page()
         await asyncio.sleep(2)
         d = self.displayed()
         self.alerts = []
         self.held = {d[2]: (7 * 60, self.cfg["stops"][0][:-1])}
+        mark("delayed")
         await self.render()
         await asyncio.sleep(6)
         self.held = {}
         self.track = {d[2]: ("D4", "D3")}
         self.last_alert_page = 0
+        mark("track_cycle")
         await self.alert_page()
         self.track = {}
         await asyncio.sleep(1)
@@ -2086,16 +2094,20 @@ class App:
             "kind": "suspension", "type": "Planned - Part Suspended",
             "head": f"No {designator(routes[0])} trains between Court Sq "
                     "and Bedford-Nostrand Avs",
-            "period": "Fri 9:45 PM to Mon 5:00 AM"}]
+            "period": "Fri 9:45 PM to Mon 5:00 AM",
+            "routes": [designator(routes[0])]}]
+        mark("notrains")
         await self.render()
         await asyncio.sleep(7)
         self.alerts = [{
             "kind": "planned", "type": "Planned - Stops Skipped",
             "head": "Trains skip 4 Av-9 St, 15 St-Prospect Park and Fort "
                     "Hamilton Pkwy",
-            "period": "Aug 21 - 24"}]
+            "period": "Aug 21 - 24", "routes": [designator(routes[0])]}]
+        mark("planned")
         await self.render()
         await asyncio.sleep(7)
+        mark("end")
         await asyncio.to_thread(self.bar.clear)
 
 
