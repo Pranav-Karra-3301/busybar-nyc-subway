@@ -9,6 +9,8 @@ Sources:
   - tools/data/busy_tiny.font     -> TINY_GLYPHS (the small size option in
                                      the bullet editor; chars the tiny font
                                      lacks simply don't get an entry)
+  - tools/data/busy_condensed_7.font -> CONDENSED_GLYPHS (the narrow face
+                                     the status plates bake their words in)
   - ~/busybar/app/canal_trains.py + g_trains.py -> BULLET_GLYPH_OVERRIDES
     (the hand-tuned N/Q/G letterforms, lifted as masks out of the legacy
     15x15 disk PNGs' black pixels) and the disk alpha mask every generated
@@ -245,6 +247,9 @@ def main() -> None:
     xl.update(XL_OVERRIDES)
     tiny = {ch: trim(rows)
             for ch, rows in font_glyphs(DATA / "busy_tiny.font").items()}
+    condensed = {ch: trim(rows)
+                 for ch, rows in font_glyphs(
+                     DATA / "busy_condensed_7.font").items()}
 
     if args.preview:
         for label, table in (("BULLET (busy_bold_7)", bullet),
@@ -284,6 +289,7 @@ def main() -> None:
         glyph_dict_src("BULLET_GLYPHS", bullet),
         glyph_dict_src("XL_GLYPHS", xl),
         glyph_dict_src("TINY_GLYPHS", tiny),
+        glyph_dict_src("CONDENSED_GLYPHS", condensed),
         glyph_dict_src("DISK_MASK_ROWS", {"@": mask}).replace(
             'DISK_MASK_ROWS = {\n    "@": [', "DISK_MASK = ["
         ).replace("],\n}", "]"),
@@ -292,8 +298,9 @@ def main() -> None:
     APP.write_text(replace_marker(src, "GLYPHS", body))
     n_b = len(bullet)
     print(f"wrote GLYPHS: {n_b} bullet glyphs, {len(xl)} XL glyphs "
-          f"({len(XL_OVERRIDES)} overridden), {len(tiny)} tiny glyphs, "
-          f"disk mask 15x15, {len(glyph_overrides)} hand-tuned letterforms")
+          f"({len(XL_OVERRIDES)} overridden), {len(tiny)} tiny + "
+          f"{len(condensed)} condensed glyphs, disk mask 15x15, "
+          f"{len(glyph_overrides)} hand-tuned letterforms")
 
 
 if __name__ == "__main__":
