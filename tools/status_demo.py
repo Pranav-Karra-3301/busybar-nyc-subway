@@ -361,6 +361,273 @@ def push_main(args):
     print("done — subway app reclaims the screen in a few seconds")
 
 
+# ---------------------------------- animated treatments (firmware language)
+# Mined from busybar-firmware: transitions are soft-edged mask anims played
+# over content — Add-blend washes with fast attack / ~1s decay
+# (transition_select*, busy_presets.c: in 100ms, out 1000ms), expanding
+# soft rings from the button (transition_select_red frame 2), collapsing
+# oval reveals (transition_oval, Multiply), red particles
+# (ending_particles), breathing background loops (indicator_busy). All of
+# it composes from the same three moves: soft radial fields, exponential
+# decays, and slow drifts — reproduced here as 72x16 frame generators that
+# app.anim_encode() can compile for the device unchanged.
+
+import math
+import random
+
+
+def _blank():
+    return [[(0, 0, 0) for _ in range(72)] for _ in range(16)]
+
+
+def _add(base, gain_fn, color):
+    """Add-blend a scalar field (0..1 per pixel) of `color` onto a frame."""
+    out = []
+    for y in range(16):
+        row = []
+        for x in range(72):
+            g = gain_fn(x, y)
+            if g <= 0:
+                row.append(base[y][x])
+                continue
+            row.append(tuple(min(255, round(c + col * g))
+                             for c, col in zip(base[y][x], color)))
+        out.append(row)
+    return out
+
+
+def _ring(cx, cy, r, sigma):
+    def gain(x, y):
+        d = math.hypot((x - cx), (y - cy) * 2.6)  # LED cells are squat
+        return math.exp(-((d - r) ** 2) / (2 * sigma * sigma))
+    return gain
+
+
+def _wash(level):
+    return lambda x, y: level
+
+
+def _stamp_text(frame, text, font, color, x0, y0, shadow=True):
+    w, h, lit = sim_text(text, font)
+    for x, y in lit:
+        tx, ty = x0 + x, y0 + y
+        if shadow and 0 <= tx < 72 and 0 <= ty + 1 < 16 \
+                and (x, y + 1) not in lit:
+            p = frame[ty + 1][tx]
+            frame[ty + 1][tx] = tuple(round(v * 0.35) for v in p)
+        if 0 <= tx < 72 and 0 <= ty < 16:
+            frame[ty][tx] = color
+    return w
+
+
+def _blit_bullet(frame, px, x0, y0):
+    for y, row in enumerate(px):
+        for x, p in enumerate(row):
+            if p[3] and 0 <= x0 + x < 72 and 0 <= y0 + y < 16:
+                frame[y0 + y][x0 + x] = p[:3]
+
+
+FPS = 30  # preview rate; the device pipeline runs these same frames at 60
+
+
+def anim_ripple(card, color):
+    """The button-press ripple: soft ring expands from the physical button
+    (top center), then an Add wash decays over ~1s. Two pulses, settle."""
+    frames = []
+    for i in range(int(3.2 * FPS)):
+        t = i / FPS
+        f = [row[:] for row in card]
+        for start in (0.0, 0.55):
+            tt = t - start
+            if 0 <= tt < 0.7:
+                r = 4 + tt / 0.7 * 78
+                f = _add(f, _ring(36, 0, r, 5), tuple(
+                    round(c * (1 - tt / 0.7)) for c in color))
+        for start in (0.12, 0.67):
+            tt = t - start
+            if 0 <= tt < 1.0:
+                f = _add(f, _wash(0.55 * math.exp(-tt / 0.28)), color)
+        frames.append(f)
+    return frames
+
+
+def anim_flash(card, color):
+    """transition_select_red language: instant wash, ~1s exponential decay,
+    three times, then the card holds clean."""
+    frames = []
+    for i in range(int(3.6 * FPS)):
+        t = i / FPS
+        f = [row[:] for row in card]
+        for start in (0.0, 0.9, 1.8):
+            tt = t - start
+            if 0 <= tt < 1.1:
+                f = _add(f, _wash(0.8 * math.exp(-tt / 0.3)), color)
+        frames.append(f)
+    return frames
+
+
+def anim_marquee(text, color):
+    """Full-screen marquee: the headline in the flash-card letter size
+    riding a dim breathing field — one pass, wraps."""
+    w, h, lit = sim_text(text, "extra_large")
+    span = w + 72 + 20
+    frames = []
+    for i in range(0, span, 2):
+        f = _blank()
+        breathe = 0.16 + 0.06 * math.sin(i / FPS * 2.2)
+        for y in range(16):
+            ramp = 1 - y / 22
+            c = tuple(round(col * breathe * ramp) for col in color)
+            for x in range(72):
+                f[y][x] = c
+        x0 = 72 - i
+        for x, y in lit:
+            tx = x0 + x
+            ty = 3 + y
+            if 0 <= tx < 72 and 0 <= ty + 1 < 16 and (x, y + 1) not in lit:
+                p = f[ty + 1][tx]
+                f[ty + 1][tx] = tuple(round(v * 0.3) for v in p)
+            if 0 <= tx < 72 and 0 <= ty < 16:
+                f[ty][tx] = (255, 255, 255)
+        frames.append(f)
+    return frames
+
+
+def anim_gradient_pulse(text, color, bullet_px=None):
+    """Just a gradient: vertical field in the alert color breathing slowly
+    (indicator-loop language), message on top."""
+    frames = []
+    for i in range(int(3.0 * FPS)):
+        t = i / FPS
+        level = 0.42 + 0.3 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / 3.0))
+        f = _blank()
+        for y in range(16):
+            ramp = 1.15 - y / 16 * 0.9
+            c = tuple(min(255, round(col * level * ramp)) for col in color)
+            for x in range(72):
+                f[y][x] = c
+        x = 1
+        if bullet_px:
+            _blit_bullet(f, bullet_px, 1, 0)
+            x = 19
+        _stamp_text(f, text, "bold", (255, 255, 255), x, 5)
+        frames.append(f)
+    return frames
+
+
+def anim_contrast(bullet_px, text, color):
+    """A contrasting gradient sweeping behind the bullet — complementary
+    color against the line color, diagonal drift (mask-anim language)."""
+    frames = []
+    for i in range(int(3.0 * FPS)):
+        t = i / FPS
+        f = _blank()
+        phase = t / 3.0 * 72
+        for y in range(16):
+            for x in range(72):
+                v = 0.28 + 0.24 * math.sin((x + y * 2 - phase * 2)
+                                           * math.pi / 36)
+                f[y][x] = tuple(min(255, round(c * v)) for c in color)
+        _blit_bullet(f, bullet_px, 1, 0)
+        _stamp_text(f, text, "bold", (255, 255, 255), 19, 5)
+        frames.append(f)
+    return frames
+
+
+def anim_particles(card, color):
+    """ending_particles language: sparse twinkling pixels in the alert
+    color over a dimmed card."""
+    rng = random.Random(7)
+    pts = [(rng.randrange(72), rng.randrange(16), rng.random() * 2 * math.pi,
+            0.6 + rng.random() * 1.2) for _ in range(46)]
+    frames = []
+    for i in range(int(3.0 * FPS)):
+        t = i / FPS
+        f = [[tuple(round(v * 0.55) for v in p) for p in row] for row in card]
+        for x, y, ph, speed in pts:
+            tw = 0.5 + 0.5 * math.sin(ph + t * 2 * math.pi * speed)
+            if tw > 0.55:
+                g = (tw - 0.55) / 0.45
+                f[y][x] = tuple(min(255, round(b + c * g))
+                                for b, c in zip(f[y][x], color))
+        frames.append(f)
+    return frames
+
+
+AMBER_RGB = (255, 176, 0)
+RED_RGB = (238, 53, 46)
+BLUE_RGB = (0, 90, 200)
+
+
+def flatten_state(elements, bullets_px):
+    """A state's element list -> one static 72x16 frame (tickers frozen at
+    their start position) to run treatments over."""
+    base, tickers = sim_render(elements, bullets_px)
+    for t in tickers:
+        for y in range(t["h"]):
+            for x in range(min(t["win"], t["w"])):
+                p = t["strip"][y][x]
+                if p[3] and 0 <= t["x"] + x < 72 and 0 <= t["y"] + y < 16:
+                    base[t["y"] + y][t["x"] + x] = p[:3]
+    return base
+
+
+def build_treatments(g, bullets, bullets_px):
+    delayed_card = flatten_state(
+        state_delayed(bullets, g["d_route"], g["d_name"], g["d_min"]),
+        bullets_px)
+    notrun_card = flatten_state(
+        state_not_running(bullets, g["s_route"], plain(g["s"]["head"]),
+                          g["s"]["period"]), bullets_px)
+    head = plain(g["a3"]["head"])
+    red_bullet = bullets_px.get("mem:1")
+    out = []
+    for name, title, frames, caption, tags in (
+        ("ripple", "Ripple — the button-press language",
+         anim_ripple(delayed_card, AMBER_RGB),
+         "Soft ring expanding from the physical button + Add-blend wash "
+         "with the firmware's fast-in/slow-out envelope (in 100ms, out "
+         "1000ms in busy_presets.c), twice, over the DELAYED card.",
+         ["transition_select_72x16 language", "Add blend"]),
+        ("flash", "Red flash ×3 — service suspended",
+         anim_flash(notrun_card, RED_RGB),
+         "The transition_select_red move: instant red wash, ~1s exponential "
+         "decay, three beats — then the NOT RUNNING card is already there, "
+         "readable.",
+         ["transition_select_red_72x16 language", "Add blend"]),
+        ("marquee", "Full-screen marquee — the headline itself",
+         anim_marquee(head[:60], RED_RGB),
+         "The alert headline at departure-flash letter size riding a dim "
+         "breathing red field, one full pass. Compiled as a .anim the "
+         "device plays this at 60 fps — smooth even over the cloud relay.",
+         ["headline: live Delays alert", "anim pipeline"]),
+        ("gradient", "Just a red gradient — breathing",
+         anim_gradient_pulse("DELAYS", RED_RGB,
+                             bullets_px.get(f"mem:{g['a3_route']}")),
+         "No shapes at all: a vertical red field breathing on a 3 s cycle "
+         "(the indicator-loop language) under the route bullet and one "
+         "line of text.",
+         ["indicator_busy language", "Mercury alert: type=Delays"]),
+        ("contrast", "Blue gradient against a red train",
+         anim_contrast(red_bullet or list(bullets_px.values())[0],
+                       "REROUTED", BLUE_RGB),
+         "Complementary field: a cold blue diagonal sweep drifting behind "
+         "the warm red 1 bullet — maximum color contrast at one glance.",
+         ["complementary to line color", "mask-anim drift language"]),
+        ("particles", "Particles — ending_particles language",
+         anim_particles(delayed_card, AMBER_RGB),
+         "Sparse amber pixels twinkling over the dimmed card — the "
+         "firmware's session-ending particle look, recolored for alerts.",
+         ["ending_particles_72x16 language"]),
+    ):
+        blob = b"".join(bytes(v for row in fr for p in row for v in p)
+                        for fr in frames)
+        out.append(dict(name=name, title=title, caption=caption, tags=tags,
+                        fps=FPS, n=len(frames),
+                        frames=base64.b64encode(blob).decode()))
+    return out
+
+
 # ------------------------------------------------- simulated board (serve)
 
 SIM_FONTS = {"tiny": ("TINY_GLYPHS", 5), "bold": ("BULLET_GLYPHS", 7),
@@ -475,7 +742,7 @@ def build_payload(captures_dir):
     from PIL import Image
     import io
     g = gather()
-    routes = {g["d_route"], g["s_route"], g["a3_route"], "N"}
+    routes = {g["d_route"], g["s_route"], g["a3_route"], "N", "1"}
     bullets = {d: f"mem:{d}" for d in routes}
     bullets_px = {}
     for d in routes:
@@ -537,7 +804,8 @@ def build_payload(captures_dir):
                               for v in p)).decode())
                      for t in tickers],
             capture=cap_url))
-    return dict(generated=time.strftime("%H:%M:%S"), states=out)
+    return dict(generated=time.strftime("%H:%M:%S"), states=out,
+                treatments=build_treatments(g, bullets, bullets_px))
 
 
 SIM_PAGE = r"""<!doctype html>
@@ -592,6 +860,21 @@ function decode(b64, w, h, rgba) {
   return out;
 }
 
+function paint(ctx, frame) {
+  const W = 72, H = 16;
+  ctx.fillStyle = "#08080a";
+  ctx.fillRect(0, 0, W * SCALE, H * SCALE);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 3;
+    const lit = frame[i] + frame[i+1] + frame[i+2] > 0;
+    ctx.fillStyle = lit ? `rgb(${frame[i]},${frame[i+1]},${frame[i+2]})`
+                        : "#141416";
+    ctx.beginPath();
+    ctx.arc((x + .5) * SCALE, (y + .5) * SCALE, SCALE * .37, 0, 6.2832);
+    ctx.fill();
+  }
+}
+
 function drawBoard(ctx, base, tickers, tms) {
   const W = 72, H = 16;
   const frame = new Uint8Array(base);          // copy RGB base
@@ -612,23 +895,18 @@ function drawBoard(ctx, base, tickers, tms) {
       frame[d] = t.data[s]; frame[d+1] = t.data[s+1]; frame[d+2] = t.data[s+2];
     }
   }
-  ctx.fillStyle = "#08080a";
-  ctx.fillRect(0, 0, W * SCALE, H * SCALE);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const i = (y * W + x) * 3;
-    const lit = frame[i] + frame[i+1] + frame[i+2] > 0;
-    ctx.fillStyle = lit ? `rgb(${frame[i]},${frame[i+1]},${frame[i+2]})`
-                        : "#141416";
-    ctx.beginPath();
-    ctx.arc((x + .5) * SCALE, (y + .5) * SCALE, SCALE * .37, 0, 6.2832);
-    ctx.fill();
-  }
+  paint(ctx, frame);
 }
 
-let boards = [];
+let boards = [], movies = [];
 function loop() {
   const tms = performance.now() - t0;
   for (const b of boards) drawBoard(b.ctx, b.base, b.tickers, tms);
+  const FR = 72 * 16 * 3;
+  for (const m of movies) {
+    const idx = Math.floor((tms / 1000) * m.fps) % m.n;
+    paint(m.ctx, m.data.subarray(idx * FR, (idx + 1) * FR));
+  }
   requestAnimationFrame(loop);
 }
 
@@ -637,7 +915,7 @@ async function load(fresh) {
   const j = await (await fetch("/demo" + (fresh ? "?fresh=1" : ""))).json();
   const main = document.getElementById("main");
   main.innerHTML = "";
-  boards = [];
+  boards = []; movies = [];
   for (const s of j.states) {
     const div = document.createElement("div");
     div.className = "state";
@@ -661,6 +939,30 @@ async function load(fresh) {
       tickers: s.tickers.map(t => ({...t, data: decode(t.strip, t.w, t.h,
                                                        true)})),
     });
+  }
+  const hdr = document.createElement("div");
+  hdr.className = "state";
+  hdr.innerHTML = `<h2 style="font-size:16px;margin-top:26px">Animated
+    treatments — the firmware's own transition language</h2>
+    <div class="caption">Mined from busybar-firmware: Add-blend washes with
+    fast attack / ~1s decay (busy_presets.c), soft rings expanding from the
+    physical button (transition_select), collapsing oval reveals
+    (transition_oval, Multiply), red particles (ending_particles), breathing
+    background loops. Every panel below is a 72×16 frame sequence the
+    existing anim pipeline can compile to a device-side 60 fps .anim.</div>`;
+  main.append(hdr);
+  for (const m of j.treatments) {
+    const div = document.createElement("div");
+    div.className = "state";
+    const tags = m.tags.map(t => `<span class="tag">${t}</span>`).join("");
+    div.innerHTML = `<h2>${m.title}</h2>
+      <div class="board"><canvas width="720" height="160"></canvas></div>
+      <div class="caption">${m.caption}</div>
+      <div class="tags">${tags}</div>`;
+    main.append(div);
+    const ctx = div.querySelector("canvas").getContext("2d");
+    movies.push({ ctx, fps: m.fps, n: m.n,
+                  data: decode(m.frames, 72, 16, false) });
   }
   document.getElementById("meta").textContent =
     `live MTA data pulled ${j.generated} — board is simulated ` +
